@@ -5,6 +5,7 @@ Speech-to-text transcription module using whisper.cpp.
 import subprocess
 import json
 import os
+import platform
 from typing import Optional
 import config
 
@@ -15,6 +16,7 @@ class Transcriber:
         """Initialize the transcriber with configuration settings."""
         self.model = config.WHISPER_MODEL
         self.whisper_executable = config.WHISPER_EXECUTABLE
+        self.is_macos = platform.system() == "Darwin"
         
     def transcribe(self, audio_file: str) -> Optional[str]:
         """
@@ -31,11 +33,24 @@ class Transcriber:
             return None
             
         try:
+            # Determine the models directory
+            # On macOS, models could be in various locations - we'll check a few
+            if self.is_macos:
+                model_paths = [
+                    f"models/ggml-{self.model}.bin",
+                    f"/opt/homebrew/share/whisper/models/ggml-{self.model}.bin",
+                    os.path.expanduser(f"~/whisper.cpp/models/ggml-{self.model}.bin"),
+                    os.path.join(os.path.dirname(self.whisper_executable), f"../models/ggml-{self.model}.bin")
+                ]
+                
+                model_path = next((path for path in model_paths if os.path.exists(path)), f"models/ggml-{self.model}.bin")
+            else:
+                model_path = f"models/ggml-{self.model}.bin"
+            
             # Call whisper.cpp using subprocess
-            # The -m flag specifies the model, -f the file, and -ojson outputs in JSON format
             command = [
                 self.whisper_executable,
-                "-m", f"models/ggml-{self.model}.bin",
+                "-m", model_path,
                 "-f", audio_file,
                 "-ojson"
             ]
@@ -92,12 +107,22 @@ class Transcriber:
             List of available model names
         """
         models = []
-        models_dir = "models"  # Assuming models are in a 'models' directory
+        model_dirs = ["models"]  # Default models directory
         
-        if os.path.exists(models_dir):
-            for file in os.listdir(models_dir):
-                if file.startswith("ggml-") and file.endswith(".bin"):
-                    model_name = file[5:-4]  # Remove 'ggml-' prefix and '.bin' suffix
-                    models.append(model_name)
+        # On macOS, check additional locations
+        if self.is_macos:
+            model_dirs.extend([
+                "/opt/homebrew/share/whisper/models",
+                os.path.expanduser("~/whisper.cpp/models"),
+                os.path.join(os.path.dirname(self.whisper_executable), "../models")
+            ])
+        
+        for models_dir in model_dirs:
+            if os.path.exists(models_dir):
+                for file in os.listdir(models_dir):
+                    if file.startswith("ggml-") and file.endswith(".bin"):
+                        model_name = file[5:-4]  # Remove 'ggml-' prefix and '.bin' suffix
+                        if model_name not in models:
+                            models.append(model_name)
                     
         return models

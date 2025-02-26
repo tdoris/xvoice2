@@ -2,9 +2,27 @@
 Configuration settings for the voice dictation application.
 """
 
+import os
+import platform
+
+# Detect operating system
+IS_MACOS = platform.system() == "Darwin"
+
 # Whisper model settings
 WHISPER_MODEL = "base"  # Options: "tiny", "base", "small", "medium", "large"
-WHISPER_EXECUTABLE = "/home/tdoris/repos/whisper.cpp/build/bin/whisper-cli"  # Path to whisper.cpp executable
+
+# Set appropriate paths based on OS
+if IS_MACOS:
+    # macOS typically uses Homebrew paths
+    WHISPER_EXECUTABLE = "/opt/homebrew/bin/whisper-cli"
+    # For Mac we use osascript for text injection
+    TEXT_INJECTOR_TYPE = "applescript"
+    TEXT_INJECTOR_EXECUTABLE = "osascript"
+else:
+    # Linux paths
+    WHISPER_EXECUTABLE = "/home/tdoris/repos/whisper.cpp/build/bin/whisper-cli"
+    TEXT_INJECTOR_TYPE = "wtype"
+    TEXT_INJECTOR_EXECUTABLE = "wtype"
 
 # PortAudio settings
 SAMPLE_RATE = 16000  # Sample rate in Hz
@@ -18,7 +36,6 @@ SILENCE_THRESHOLD = 0.03  # Threshold to detect silence
 SILENCE_DURATION = 1.0  # Duration of silence to trigger end of speech in seconds
 
 # Text injection settings
-WTYPE_EXECUTABLE = "wtype"  # Path to wtype executable
 TYPING_DELAY = 0  # Delay between characters in milliseconds (0 for no delay)
 
 # LLM API settings
@@ -29,4 +46,4 @@ LLM_PROMPT = "Fix grammar and punctuation only in the following text, maintain o
 
 # Dictation mode settings
 DEFAULT_MODE = "general"  # Default dictation mode
-AVAILABLE_MODES = ["general", "command", "email"]  # Available modes
+AVAILABLE_MODES = ["general", "command", "email"]

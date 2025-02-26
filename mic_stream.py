@@ -9,6 +9,7 @@ import wave
 import os
 import tempfile
 import time
+import platform
 from typing import Generator, Tuple, Optional
 import config
 
@@ -29,6 +30,7 @@ class MicrophoneStream:
         self.silence_threshold = config.SILENCE_THRESHOLD
         self.silence_duration = config.SILENCE_DURATION
         self.chunk_duration = config.CHUNK_DURATION
+        self.is_macos = platform.system() == "Darwin"
         
         self.audio = pyaudio.PyAudio()
         self.stream = None
@@ -44,7 +46,7 @@ class MicrophoneStream:
         self.close()
     
     def _find_input_device(self):
-        """Find a valid audio input device."""
+        """Find a valid audio input device with macOS preference."""
         # Get information about audio devices
         info = self.audio.get_host_api_info_by_index(0)
         num_devices = info.get('deviceCount')
@@ -60,11 +62,17 @@ class MicrophoneStream:
             
             print(f"  - Device {i}: {name} (max inputs: {max_input_channels})")
             
-            # If this device supports input and we haven't found a device yet
-            if max_input_channels > 0 and not found_device:
-                self.device_index = i
-                found_device = True
-                print(f"    -> Selected this device")
+            # On macOS, prioritize built-in input devices
+            if max_input_channels > 0:
+                if not found_device or (self.is_macos and "built-in" in name.lower()):
+                    self.device_index = i
+                    found_device = True
+                    
+                    if self.is_macos and "built-in" in name.lower():
+                        print(f"    -> Selected this device (macOS built-in preferred)")
+                        break
+                    else:
+                        print(f"    -> Selected this device")
         
         if not found_device:
             print("Warning: No input devices found. Using default device.")
@@ -104,6 +112,8 @@ class MicrophoneStream:
                 print("Successfully opened audio stream with default device")
             except Exception as e:
                 print(f"Fatal error: Could not open any audio stream: {e}")
+                if self.is_macos:
+                    print("On macOS, make sure you've granted microphone permissions to Terminal or your application.")
                 print("Please check your audio configuration or try running with different audio hardware.")
                 raise
     

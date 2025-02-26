@@ -1,24 +1,29 @@
-# Linux Voice Dictation Application
+# Voice Dictation Application
 
-A self-contained Linux voice dictation application that captures microphone input, transcribes speech to text, and injects the text into the active application.
+A cross-platform voice dictation application that captures microphone input, transcribes speech to text, and injects the text into the active application. Supports both Linux and macOS.
 
 ## Features
 
 - Real-time microphone input capture using PortAudio
 - Speech-to-text transcription using whisper.cpp
-- Text injection into the active application using wtype (Wayland)
+- Text injection into the active application (using wtype on Linux, AppleScript on macOS)
 - Optional grammar and punctuation correction using LLM API
 - Modular architecture for easy extensions
 
 ## Requirements
 
-- Wayland-based Linux system
+### Common Requirements
+- Python 3.7+
 - PortAudio
 - whisper.cpp
-- wtype
-- Python 3.7+
+
+### Platform-Specific Requirements
+- **Linux**: Wayland and wtype
+- **macOS**: Accessibility permissions
 
 ## Installation
+
+### Linux Setup
 
 1. Install system dependencies:
 
@@ -41,7 +46,36 @@ bash ./models/download-ggml-model.sh base
 # Add whisper.cpp to your PATH or adjust the path in config.py
 ```
 
-3. Install Python dependencies:
+### macOS Setup
+
+1. Install dependencies:
+
+```bash
+# Install Homebrew if not already installed
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   
+# Install required packages
+brew install portaudio
+brew install python
+```
+
+2. Install whisper.cpp:
+
+```bash
+git clone https://github.com/ggerganov/whisper.cpp.git
+cd whisper.cpp
+make
+bash ./models/download-ggml-model.sh base
+# Copy to a location in your PATH or update config.py
+sudo cp build/bin/whisper-cli /opt/homebrew/bin/
+```
+
+3. **Critical: Grant Accessibility Permissions**
+   - Go to System Preferences → Security & Privacy → Privacy → Accessibility
+   - Add Terminal (or your application) to the list
+   - This permission is required for text injection to work
+
+4. Install Python dependencies:
 
 ```bash
 pip install -r requirements.txt
@@ -56,6 +90,8 @@ Edit `config.py` to customize settings:
 - Text injection settings
 - LLM API configuration (optional)
 - Dictation modes
+
+The application will automatically detect your operating system and use the appropriate settings.
 
 ## Usage
 
@@ -78,17 +114,13 @@ python main.py --use-llm
 - `main.py`: Application entry point
 - `mic_stream.py`: Microphone input handling
 - `transcriber.py`: Whisper.cpp integration
-- `text_injector.py`: Text injection via wtype
+- `text_injector.py`: Text injection (wtype or AppleScript)
 - `formatter.py`: Optional LLM integration
 - `config.py`: Configuration settings
 
-## Extending the Application
+## Troubleshooting
 
-The modular architecture allows for easy extensions:
-
-1. Add new dictation modes in `config.py`
-2. Implement mode-specific processing in `formatter.py`
-3. Add new command-line options in `main.py`
+If you encounter issues, please check the `troubleshooting.md` file for platform-specific solutions.
 
 ## License
 

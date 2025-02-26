@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Linux Voice Dictation Application - Main Entry Point
+Voice Dictation Application - Main Entry Point
 
 This application captures microphone input, performs speech-to-text transcription
 using whisper.cpp, and injects the transcribed text into the active application.
@@ -11,6 +11,7 @@ import sys
 import time
 import signal
 import argparse
+import platform
 from typing import NoReturn
 
 import config
@@ -31,6 +32,7 @@ class VoiceDictationApp:
         """
         self.mode = mode
         self.running = False
+        self.is_macos = platform.system() == "Darwin"
         
         # Initialize components
         self.transcriber = Transcriber()
@@ -57,13 +59,23 @@ class VoiceDictationApp:
         # Check for whisper.cpp
         if not self.transcriber.is_available():
             print(f"Error: whisper.cpp executable '{config.WHISPER_EXECUTABLE}' not found or not working")
-            print("Please make sure whisper.cpp is installed and in your PATH")
+            if self.is_macos:
+                print("Make sure whisper.cpp is installed via Homebrew or in your PATH")
+                print("  brew install whisper.cpp")
+                print("  or download and build from: https://github.com/ggerganov/whisper.cpp")
+            else:
+                print("Please make sure whisper.cpp is installed and in your PATH")
             return False
             
-        # Check for wtype
+        # Check for text injector (wtype on Linux, AppleScript on macOS)
         if not self.text_injector.is_available():
-            print(f"Error: wtype executable '{config.WTYPE_EXECUTABLE}' not found or not working")
-            print("Please make sure wtype is installed and in your PATH")
+            if self.is_macos:
+                print("Error: Text injection is unavailable.")
+                print("Make sure Terminal has Accessibility permissions:")
+                print("System Preferences → Security & Privacy → Privacy → Accessibility")
+            else:
+                print(f"Error: wtype executable '{config.TEXT_INJECTOR_EXECUTABLE}' not found or not working")
+                print("Please make sure wtype is installed and in your PATH")
             return False
             
         return True
@@ -130,7 +142,10 @@ class VoiceDictationApp:
 
 def main():
     """Parse command line arguments and start the application."""
-    parser = argparse.ArgumentParser(description="Linux Voice Dictation Application")
+    parser = argparse.ArgumentParser(
+        description="Voice Dictation Application for " + 
+                   ("macOS" if platform.system() == "Darwin" else "Linux")
+    )
     
     parser.add_argument(
         "--mode", 
