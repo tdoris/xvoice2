@@ -1,6 +1,14 @@
 # XVoice 2.0 Development Guidelines
 
+## Environment Setup
+- **Activate Virtual Environment**: 
+  - Linux/macOS: `source venv/bin/activate`
+  - Windows: `venv\Scripts\activate`
+- **Set PYTHONPATH** (if needed): `export PYTHONPATH=/path/to/xvoice2.0`
+
 ## Common Commands
+Always run these commands after activating the virtual environment:
+
 - **Run Application**: `python main.py`
 - **Run with Options**: `python main.py --mode email --use-llm`
 - **Install Dependencies**: `pip install -r requirements.txt`
