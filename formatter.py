@@ -1,11 +1,12 @@
 """
 Optional LLM-based text formatting module.
 Uses LLM APIs to correct grammar and punctuation in transcribed text.
+Supports both cloud APIs (OpenAI) and local models via Ollama.
 """
 
 import requests
 import json
-from typing import Optional
+from typing import Optional, Dict, Any
 import config
 
 class TextFormatter:
@@ -18,6 +19,11 @@ class TextFormatter:
         self.model = config.LLM_MODEL
         self.prompt = config.LLM_PROMPT
         
+        # Ollama specific settings
+        self.use_local_llm = config.USE_LOCAL_LLM
+        self.ollama_model = config.OLLAMA_MODEL
+        self.ollama_url = config.OLLAMA_URL
+        
     def format_text(self, text: str, mode: str = "general") -> str:
         """
         Format text using an LLM API to correct grammar and punctuation.
@@ -29,12 +35,15 @@ class TextFormatter:
         Returns:
             Formatted text, or the original text if formatting is disabled or fails
         """
-        # Return the original text if LLM formatting is disabled
-        if not self.use_llm or not self.api_key:
+        # Return the original text if LLM formatting is disabled or text is empty
+        if not text.strip():
             return text
             
-        # Return the original text if it's empty
-        if not text.strip():
+        # Check which LLM option is enabled (if any)
+        use_openai = self.use_llm and self.api_key
+        use_ollama = self.use_local_llm
+        
+        if not use_openai and not use_ollama:
             return text
             
         try:
@@ -42,8 +51,13 @@ class TextFormatter:
             mode_prompt = self._get_mode_prompt(mode)
             full_prompt = f"{mode_prompt} {text}"
             
-            # Make API request to OpenAI
-            response = self._call_openai_api(full_prompt)
+            # Choose LLM provider based on configuration
+            if use_ollama:
+                response = self._call_ollama_api(full_prompt)
+            elif use_openai:
+                response = self._call_openai_api(full_prompt)
+            else:
+                return text
             
             if response:
                 return response
@@ -108,4 +122,43 @@ class TextFormatter:
             return result["choices"][0]["message"]["content"].strip()
         except requests.RequestException as e:
             print(f"API request error: {e}")
+            return None
+            
+    def _call_ollama_api(self, prompt: str) -> Optional[str]:
+        """
+        Call the local Ollama API to format the text.
+        
+        Args:
+            prompt: Full prompt with text to format
+            
+        Returns:
+            Formatted text from the local LLM or None if the request fails
+        """
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "model": self.ollama_model,
+            "prompt": prompt,
+            "system": "You are a helpful assistant that fixes grammar and punctuation only.",
+            "stream": False,
+            "temperature": 0.3,  # Low temperature for more consistent results
+        }
+        
+        try:
+            response = requests.post(
+                self.ollama_url,
+                headers=headers,
+                data=json.dumps(data),
+                timeout=5  # Short timeout to ensure low latency
+            )
+            
+            response.raise_for_status()
+            result = response.json()
+            
+            # Ollama response format is different from OpenAI
+            return result.get("response", "").strip()
+        except requests.RequestException as e:
+            print(f"Ollama API request error: {e}")
             return None

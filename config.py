@@ -40,9 +40,14 @@ TYPING_DELAY = 0  # Delay between characters in milliseconds (0 for no delay)
 
 # LLM API settings
 USE_LLM = False  # Enable/disable LLM formatting
-LLM_API_KEY = ""  # Your API key
+LLM_API_KEY = ""  # Your API key (only needed for OpenAI)
 LLM_MODEL = "gpt-3.5-turbo"  # Model to use for formatting
 LLM_PROMPT = "Fix grammar and punctuation only in the following text, maintain original meaning and style: "
+
+# Local LLM settings (Ollama)
+USE_LOCAL_LLM = False  # Enable/disable local LLM formatting
+OLLAMA_MODEL = "llama3"  # Default Ollama model to use
+OLLAMA_URL = "http://localhost:11434/api/generate"  # Ollama API URL
 
 # Dictation mode settings
 DEFAULT_MODE = "general"  # Default dictation mode

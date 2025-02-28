@@ -7,7 +7,7 @@ A cross-platform voice dictation application that captures microphone input, tra
 - Real-time microphone input capture using PortAudio
 - Speech-to-text transcription using whisper.cpp
 - Text injection into the active application (using wtype on Linux, AppleScript on macOS)
-- Optional grammar and punctuation correction using LLM API
+- Optional grammar and punctuation correction using LLM (supports both OpenAI API and local Ollama models)
 - Modular architecture for easy extensions
 
 ## Requirements
@@ -16,6 +16,7 @@ A cross-platform voice dictation application that captures microphone input, tra
 - Python 3.7+
 - PortAudio
 - whisper.cpp
+- (Optional) Ollama for local LLM support
 
 ### Platform-Specific Requirements
 - **Linux**: Wayland and wtype
@@ -75,7 +76,23 @@ sudo cp build/bin/whisper-cli /opt/homebrew/bin/
    - Add Terminal (or your application) to the list
    - This permission is required for text injection to work
 
-4. Install Python dependencies:
+4. (Optional) Install Ollama for local LLM support:
+
+```bash
+# Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# macOS
+brew install ollama
+
+# Start the Ollama server
+ollama serve
+
+# In a new terminal, pull a model
+ollama pull llama3
+```
+
+5. Install Python dependencies:
 
 ```bash
 pip install -r requirements.txt
@@ -88,7 +105,7 @@ Edit `config.py` to customize settings:
 - Whisper model and executable path
 - Audio capture parameters
 - Text injection settings
-- LLM API configuration (optional)
+- LLM configuration (OpenAI API or local Ollama)
 - Dictation modes
 
 The application will automatically detect your operating system and use the appropriate settings.
@@ -105,8 +122,20 @@ python main.py --mode email
 # With specific Whisper model
 python main.py --model medium
 
-# Enable LLM formatting
+# Enable OpenAI LLM formatting (requires API key in config.py)
 python main.py --use-llm
+
+# Use local Ollama for text formatting
+python main.py --use-local-llm
+
+# Specify which Ollama model to use
+python main.py --use-local-llm --ollama-model llama3
+
+# List available Whisper models
+python main.py --list-models
+
+# List available Ollama models
+python main.py --list-ollama-models
 ```
 
 ## Project Structure

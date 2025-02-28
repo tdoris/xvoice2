@@ -12,6 +12,7 @@ import time
 import signal
 import argparse
 import platform
+import requests
 from typing import NoReturn
 
 import config
@@ -84,6 +85,33 @@ class VoiceDictationApp:
                 print("Please make sure wtype is installed and in your PATH")
             return False
             
+        # Check for Ollama if local LLM is enabled
+        if config.USE_LOCAL_LLM:
+            try:
+                response = requests.get("http://localhost:11434/api/version", timeout=3)
+                if response.status_code != 200:
+                    print(f"Error: Ollama server is not responding correctly (status {response.status_code})")
+                    print("Make sure Ollama is running with: ollama serve")
+                    return False
+                    
+                # Check if the requested model is available
+                model_response = requests.get("http://localhost:11434/api/tags", timeout=3)
+                if model_response.status_code == 200:
+                    models = model_response.json().get("models", [])
+                    model_names = [model["name"] for model in models]
+                    if config.OLLAMA_MODEL not in model_names:
+                        print(f"Error: Ollama model '{config.OLLAMA_MODEL}' not found")
+                        print(f"Available models: {', '.join(model_names)}")
+                        print(f"To install the model, run: ollama pull {config.OLLAMA_MODEL}")
+                        return False
+                else:
+                    print("Warning: Could not verify Ollama model availability")
+            except requests.RequestException as e:
+                print(f"Error connecting to Ollama server: {e}")
+                print("Make sure Ollama is installed and running with: ollama serve")
+                return False
+            
+        print("All dependencies found!")
         return True
         
     def run(self) -> None:
@@ -132,9 +160,10 @@ class VoiceDictationApp:
             
         print(f" Done: '{transcription}'")
         
-        # Step 2: Format the text if enabled
-        if config.USE_LLM:
-            print("Formatting with LLM...", end="", flush=True)
+        # Step 2: Format the text if either LLM option is enabled
+        if config.USE_LLM or config.USE_LOCAL_LLM:
+            llm_type = "Ollama" if config.USE_LOCAL_LLM else "OpenAI"
+            print(f"Formatting with {llm_type}...", end="", flush=True)
             formatted_text = self.formatter.format_text(transcription, self.mode)
             print(" Done")
         else:
@@ -178,12 +207,29 @@ def main():
         help="Enable LLM formatting (requires API key in config.py)"
     )
     
+    parser.add_argument(
+        "--use-local-llm",
+        action="store_true",
+        help="Use local Ollama LLM for formatting instead of OpenAI"
+    )
+    
+    parser.add_argument(
+        "--ollama-model",
+        help=f"Ollama model to use (default: {config.OLLAMA_MODEL})"
+    )
+    
+    parser.add_argument(
+        "--list-ollama-models",
+        action="store_true",
+        help="List available Ollama models and exit"
+    )
+    
     args = parser.parse_args()
     
     # Initialize transcriber just for model checking
     transcriber = Transcriber()
     
-    # List models and exit if requested
+    # List whisper models and exit if requested
     if args.list_models:
         available_models = transcriber.get_available_models()
         if available_models:
@@ -195,14 +241,45 @@ def main():
             print("For installation instructions, run: python main.py --model base")
         return
     
+    # List Ollama models and exit if requested
+    if args.list_ollama_models:
+        try:
+            response = requests.get("http://localhost:11434/api/tags", timeout=5)
+            if response.status_code == 200:
+                models = response.json().get("models", [])
+                if models:
+                    print("Available Ollama models:")
+                    for model in models:
+                        print(f"  - {model['name']}")
+                else:
+                    print("No Ollama models found.")
+                    print("To install models, run: ollama pull llama3")
+            else:
+                print("Failed to list Ollama models. Is Ollama running?")
+                print("Start Ollama with 'ollama serve' and try again.")
+        except Exception as e:
+            print(f"Error connecting to Ollama: {e}")
+            print("Make sure Ollama is installed and running on localhost:11434")
+        return
+    
     # Override config settings from command line
     if args.model:
         config.WHISPER_MODEL = args.model
         # Reinitialize with new model
         transcriber = Transcriber()
         
+    # LLM configuration
     if args.use_llm:
         config.USE_LLM = True
+    
+    if args.use_local_llm:
+        config.USE_LOCAL_LLM = True
+        # When using local LLM, disable OpenAI to avoid confusion
+        if config.USE_LLM and not args.use_llm:
+            config.USE_LLM = False
+            
+    if args.ollama_model:
+        config.OLLAMA_MODEL = args.ollama_model
         
     # Create and run the application
     app = VoiceDictationApp(mode=args.mode)
