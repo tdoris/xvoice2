@@ -17,7 +17,73 @@ class Transcriber:
         self.model = config.WHISPER_MODEL
         self.whisper_executable = config.WHISPER_EXECUTABLE
         self.is_macos = platform.system() == "Darwin"
+        self._model_path = None  # Will be set when validated
         
+    def _find_model_path(self) -> Optional[str]:
+        """
+        Find the path to the selected whisper model.
+        
+        Returns:
+            Path to the model file if found, None otherwise
+        """
+        # If we already found the path, return it
+        if self._model_path and os.path.exists(self._model_path):
+            return self._model_path
+            
+        # On macOS, models could be in various locations - we'll check a few
+        if self.is_macos:
+            model_paths = [
+                f"models/ggml-{self.model}.bin",
+                f"/opt/homebrew/share/whisper/models/ggml-{self.model}.bin",
+                os.path.expanduser(f"~/whisper.cpp/models/ggml-{self.model}.bin"),
+                os.path.join(os.path.dirname(self.whisper_executable), f"../models/ggml-{self.model}.bin")
+            ]
+            
+            for path in model_paths:
+                if os.path.exists(path):
+                    self._model_path = path
+                    return path
+        else:
+            # Linux locations
+            model_paths = [
+                f"models/ggml-{self.model}.bin",
+                # Add path relative to the executable
+                os.path.join(os.path.dirname(self.whisper_executable), f"../models/ggml-{self.model}.bin"),
+                # Add user home directory path
+                os.path.expanduser(f"~/whisper.cpp/models/ggml-{self.model}.bin")
+            ]
+            
+            for path in model_paths:
+                if os.path.exists(path):
+                    self._model_path = path
+                    return path
+                    
+        return None
+    
+    def is_model_available(self) -> bool:
+        """
+        Check if the selected model file exists.
+        
+        Returns:
+            True if the model file is found, False otherwise
+        """
+        return self._find_model_path() is not None
+        
+    def get_model_installation_instructions(self) -> str:
+        """
+        Get instructions for installing the missing model.
+        
+        Returns:
+            String with installation instructions
+        """
+        return (
+            f"Model '{self.model}' not found. To install it:\n"
+            f"1. Navigate to your whisper.cpp directory\n"
+            f"2. Run: bash ./models/download-ggml-model.sh {self.model}\n"
+            f"3. Restart the application\n\n"
+            f"Available models: tiny, base, small, medium, large"
+        )
+    
     def transcribe(self, audio_file: str) -> Optional[str]:
         """
         Transcribe audio file using whisper.cpp.
@@ -32,21 +98,13 @@ class Transcriber:
             print(f"Audio file not found: {audio_file}")
             return None
             
-        try:
-            # Determine the models directory
-            # On macOS, models could be in various locations - we'll check a few
-            if self.is_macos:
-                model_paths = [
-                    f"models/ggml-{self.model}.bin",
-                    f"/opt/homebrew/share/whisper/models/ggml-{self.model}.bin",
-                    os.path.expanduser(f"~/whisper.cpp/models/ggml-{self.model}.bin"),
-                    os.path.join(os.path.dirname(self.whisper_executable), f"../models/ggml-{self.model}.bin")
-                ]
-                
-                model_path = next((path for path in model_paths if os.path.exists(path)), f"models/ggml-{self.model}.bin")
-            else:
-                model_path = f"models/ggml-{self.model}.bin"
+        # Find model path
+        model_path = self._find_model_path()
+        if not model_path:
+            print(f"Error: Model '{self.model}' not found.")
+            return None
             
+        try:
             # Call whisper.cpp using subprocess
             command = [
                 self.whisper_executable,

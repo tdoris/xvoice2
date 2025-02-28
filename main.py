@@ -66,6 +66,12 @@ class VoiceDictationApp:
             else:
                 print("Please make sure whisper.cpp is installed and in your PATH")
             return False
+        
+        # Check if the selected model is available
+        if not self.transcriber.is_model_available():
+            print(f"Error: Selected Whisper model '{self.transcriber.model}' not found")
+            print(self.transcriber.get_model_installation_instructions())
+            return False
             
         # Check for text injector (wtype on Linux, AppleScript on macOS)
         if not self.text_injector.is_available():
@@ -156,7 +162,14 @@ def main():
     
     parser.add_argument(
         "--model",
+        choices=["tiny", "base", "small", "medium", "large"],
         help=f"Whisper model to use (default: {config.WHISPER_MODEL})"
+    )
+    
+    parser.add_argument(
+        "--list-models",
+        action="store_true",
+        help="List available installed models and exit"
     )
     
     parser.add_argument(
@@ -167,9 +180,26 @@ def main():
     
     args = parser.parse_args()
     
+    # Initialize transcriber just for model checking
+    transcriber = Transcriber()
+    
+    # List models and exit if requested
+    if args.list_models:
+        available_models = transcriber.get_available_models()
+        if available_models:
+            print("Installed Whisper models:")
+            for model in available_models:
+                print(f"  - {model}")
+        else:
+            print("No Whisper models found. You need to install at least one model.")
+            print("For installation instructions, run: python main.py --model base")
+        return
+    
     # Override config settings from command line
     if args.model:
         config.WHISPER_MODEL = args.model
+        # Reinitialize with new model
+        transcriber = Transcriber()
         
     if args.use_llm:
         config.USE_LLM = True
