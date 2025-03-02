@@ -293,6 +293,13 @@ def main():
     if args.ollama_model:
         config.OLLAMA_MODEL = args.ollama_model
         
+    # If we're in command mode, print a note about command execution
+    if args.mode == "command":
+        execution_status = "enabled" if config.EXECUTE_COMMANDS else "disabled"
+        print(f"Command mode active. Command execution is {execution_status}.")
+        print("Commands will be typed into the active terminal window" + 
+              (" and automatically executed" if config.EXECUTE_COMMANDS else "") + ".")
+    
     # Create and run the application
     app = VoiceDictationApp(mode=args.mode)
     app.run()

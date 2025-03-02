@@ -88,9 +88,12 @@ class TextFormatter:
         is_macos = platform.system() == "Darwin"
         os_type = "macOS" if is_macos else "Linux"
         
-        if mode == "email":
-            return "Format the following text as professional email content with proper grammar and punctuation:"
-        elif mode == "command":
+        # Use the mode prompts from config if available
+        if mode in config.MODE_PROMPTS and config.MODE_PROMPTS[mode] is not None:
+            return config.MODE_PROMPTS[mode]
+        
+        # Special handling for command mode which needs to be platform-specific
+        if mode == "command":
             return f"""
 You are a command-line expert for {os_type}. 
 Convert the following spoken instruction into a valid shell command for {os_type}.
@@ -104,8 +107,9 @@ For example:
 - "find all python files containing the word error" → "find . -name '*.py' -exec grep -l 'error' {{}} \\;"
 
 Instruction: """
-        else:  # general mode
-            return self.prompt
+        
+        # Default fallback to general prompt
+        return self.prompt
     
     def _call_openai_api(self, prompt: str) -> Optional[str]:
         """

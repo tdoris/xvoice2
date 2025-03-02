@@ -1,9 +1,14 @@
 """
 Configuration settings for the voice dictation application.
+
+This file contains default configuration values. Users can override these 
+by creating a config_local.py file with their own settings.
 """
 
 import os
 import platform
+import importlib.util
+import sys
 
 # Detect operating system
 IS_MACOS = platform.system() == "Darwin"
@@ -54,3 +59,32 @@ OLLAMA_URL = "http://localhost:11434/api/generate"  # Ollama API URL
 # Dictation mode settings
 DEFAULT_MODE = "general"  # Default dictation mode
 AVAILABLE_MODES = ["general", "command", "email"]
+
+# In command mode, should the Enter key be pressed after injecting text?
+# This will execute the command in a terminal
+EXECUTE_COMMANDS = True  # Set to False to only type commands without executing them
+
+# Mode-specific LLM prompts
+MODE_PROMPTS = {
+    "general": LLM_PROMPT,  # Use general prompt defined above
+    "email": "Format the following text as professional email content with proper grammar and punctuation:",
+    "command": None  # This is handled dynamically in the formatter to be platform-specific
+}
+
+# Load local config if it exists
+try:
+    # Check if config_local.py exists
+    if importlib.util.find_spec("config_local"):
+        import config_local
+        
+        # Update this module's variables with values from config_local
+        current_module = sys.modules[__name__]
+        for attr in dir(config_local):
+            # Only import non-private attributes
+            if not attr.startswith('_'):
+                setattr(current_module, attr, getattr(config_local, attr))
+                
+        print("Loaded configuration from config_local.py")
+except Exception as e:
+    print(f"Warning: Could not load config_local.py: {e}")
+    print("Using default configuration")

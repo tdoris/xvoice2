@@ -54,6 +54,13 @@ class TextInjector:
             # Use AppleScript to type the text
             applescript = f'tell application "System Events" to keystroke "{escaped_text}"'
             
+            # Check if we should execute the command in terminal mode
+            # This is a special case for command mode where we want to execute the command
+            if hasattr(config, 'EXECUTE_COMMANDS') and config.EXECUTE_COMMANDS:
+                print("[DEBUG] Command mode with execution enabled. Adding Return keystroke.")
+                applescript = f'tell application "System Events" to keystroke "{escaped_text}"\n' + \
+                             'tell application "System Events" to keystroke return'
+            
             if self.typing_delay > 0:
                 # Simulate typing with delay for each character
                 for char in text:
@@ -61,6 +68,11 @@ class TextInjector:
                     char_script = f'tell application "System Events" to keystroke "{char_escaped}"'
                     subprocess.run(["osascript", "-e", char_script], check=True)
                     time.sleep(self.typing_delay / 1000.0)  # Convert ms to seconds
+                
+                # Add Return keystroke if in command execution mode
+                if hasattr(config, 'EXECUTE_COMMANDS') and config.EXECUTE_COMMANDS:
+                    subprocess.run(["osascript", "-e", 'tell application "System Events" to keystroke return'], check=True)
+                
                 return True
             else:
                 # Type all at once
@@ -88,6 +100,9 @@ class TextInjector:
             # Use echo to pipe the text into wtype
             command = f"echo {escaped_text} | {self.executable}"
             
+            # Check if we should execute the command in terminal mode
+            execute_command = hasattr(config, 'EXECUTE_COMMANDS') and config.EXECUTE_COMMANDS
+            
             # If typing delay is specified, use a different approach to simulate typing
             if self.typing_delay > 0:
                 for char in text:
@@ -95,10 +110,22 @@ class TextInjector:
                     char_command = f"{self.executable} {shlex.quote(char)}"
                     subprocess.run(char_command, shell=True, check=True)
                     time.sleep(self.typing_delay / 1000.0)  # Convert ms to seconds
+                
+                # Add Enter keystroke if in command execution mode
+                if execute_command:
+                    print("[DEBUG] Command mode with execution enabled. Adding Return keystroke.")
+                    subprocess.run(f"{self.executable} -k Return", shell=True, check=True)
+                
                 return True
                 
             # Standard approach - pipe the whole text at once
             subprocess.run(command, shell=True, check=True)
+            
+            # Add Enter keystroke if in command execution mode
+            if execute_command:
+                print("[DEBUG] Command mode with execution enabled. Adding Return keystroke.")
+                subprocess.run(f"{self.executable} -k Return", shell=True, check=True)
+            
             return True
             
         except subprocess.SubprocessError as e:
