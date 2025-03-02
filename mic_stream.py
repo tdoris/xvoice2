@@ -162,9 +162,8 @@ class MicrophoneStream:
         speech_detected = False
         silence_after_speech = False
         
-        # Increase max capture duration to allow for longer sentences
-        max_sentence_duration = 10  # seconds
-        max_frames = int(self.sample_rate / self.chunk_size * max_sentence_duration)
+        # Use configured maximum sentence duration
+        max_frames = int(self.sample_rate / self.chunk_size * config.MAX_SENTENCE_DURATION)
         max_amplitude_seen = 0
         
         try:
@@ -221,7 +220,7 @@ class MicrophoneStream:
         
         # If we've reached max frames without ending silence, that's okay - we'll process what we have
         if len(frames) >= max_frames:
-            print(f"Reached maximum recording length ({max_sentence_duration}s), processing sentence.")
+            print(f"Reached maximum recording length ({config.MAX_SENTENCE_DURATION}s), processing sentence.")
             
         # We've definitely detected speech at this point
         speech_detected = True
