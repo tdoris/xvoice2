@@ -110,7 +110,7 @@ class Transcriber:
                 self.whisper_executable,
                 "-m", model_path,
                 "-f", audio_file,
-                "-ojson"
+                "-oj"  # Output JSON flag
             ]
             
             result = subprocess.run(
@@ -124,11 +124,34 @@ class Transcriber:
             # Parse the JSON output
             try:
                 output = json.loads(result.stdout)
-                transcription = output.get('text', '').strip()
-                return transcription
+                
+                # Extract and clean the text
+                raw_text = output.get('text', '').strip()
+                
+                # Clean up timestamp patterns and [BLANK_AUDIO]
+                import re
+                
+                # Remove timestamp patterns like [00:00:00.000 --> 00:00:02.000]
+                clean_text = re.sub(r'\[\d+:\d+:\d+\.\d+ --> \d+:\d+:\d+\.\d+\]\s*', '', raw_text)
+                
+                # Remove [BLANK_AUDIO] entries
+                clean_text = re.sub(r'\[BLANK_AUDIO\]', '', clean_text)
+                
+                # Remove double spaces and trim
+                clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+                
+                return clean_text
             except json.JSONDecodeError:
-                # Fallback to raw output if JSON parsing fails
-                return result.stdout.strip()
+                # Try to extract the actual transcription from raw output
+                import re
+                
+                # Extract what appears to be the actual text content (remove timestamps and [BLANK_AUDIO])
+                raw_text = result.stdout.strip()
+                clean_text = re.sub(r'\[\d+:\d+:\d+\.\d+ --> \d+:\d+:\d+\.\d+\]\s*', '', raw_text)
+                clean_text = re.sub(r'\[BLANK_AUDIO\]', '', clean_text)
+                clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+                
+                return clean_text
                 
         except subprocess.CalledProcessError as e:
             print(f"Transcription error: {e}")

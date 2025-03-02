@@ -62,14 +62,14 @@ class MicrophoneStream:
             
             print(f"  - Device {i}: {name} (max inputs: {max_input_channels})")
             
-            # On macOS, prioritize built-in input devices
+            # Specifically prioritize the MacBook Air Microphone
             if max_input_channels > 0:
-                if not found_device or (self.is_macos and "built-in" in name.lower()):
+                if not found_device or "MacBook Air Microphone" in name:
                     self.device_index = i
                     found_device = True
                     
-                    if self.is_macos and "built-in" in name.lower():
-                        print(f"    -> Selected this device (macOS built-in preferred)")
+                    if "MacBook Air Microphone" in name:
+                        print(f"    -> Selected this device (MacBook Air Microphone preferred)")
                         break
                     else:
                         print(f"    -> Selected this device")
@@ -139,7 +139,11 @@ class MicrophoneStream:
         Returns:
             True if the audio is below the silence threshold
         """
-        return np.max(np.abs(data_array)) < self.silence_threshold
+        # Hardcoded threshold that matches the scale of int16 audio
+        actual_threshold = 1000
+        
+        max_amplitude = np.max(np.abs(data_array))
+        return max_amplitude < actual_threshold
     
     def capture_chunk(self) -> Tuple[str, bool]:
         """
@@ -156,33 +160,71 @@ class MicrophoneStream:
         frames = []
         silent_frames = 0
         speech_detected = False
-        max_frames = int(self.sample_rate / self.chunk_size * self.chunk_duration)
+        silence_after_speech = False
+        
+        # Increase max capture duration to allow for longer sentences
+        max_sentence_duration = 10  # seconds
+        max_frames = int(self.sample_rate / self.chunk_size * max_sentence_duration)
+        max_amplitude_seen = 0
         
         try:
-            # Capture audio for the specified chunk duration or until silence
-            for _ in range(max_frames):
+            # First, wait for speech to begin
+            print("Waiting for speech...")
+            while not speech_detected and len(frames) < max_frames:
                 data = self.stream.read(self.chunk_size, exception_on_overflow=False)
                 frames.append(data)
                 
                 # Convert to numpy array for silence detection
                 data_array = np.frombuffer(data, dtype=np.int16)
+                current_max = np.max(np.abs(data_array))
+                
+                # Check if this frame contains speech
+                if not self.is_silent(data_array):
+                    speech_detected = True
+                    print("Speech detected! Capturing full sentence...")
+                
+                # If we've captured a lot of frames with no speech, discard them and keep waiting
+                if len(frames) > 30 and not speech_detected:  # ~1 second of silence
+                    frames = frames[-10:]  # Keep only last ~0.3 seconds
+            
+            # If no speech detected after max_frames, return early
+            if not speech_detected:
+                return "", False
+                
+            # Now capture the rest of the sentence until silence
+            consecutive_silence_frames = 0
+            required_silence_frames = int(self.silence_duration * self.sample_rate / self.chunk_size)
+            
+            while not silence_after_speech and len(frames) < max_frames:
+                data = self.stream.read(self.chunk_size, exception_on_overflow=False)
+                frames.append(data)
+                
+                # Convert to numpy array for silence detection
+                data_array = np.frombuffer(data, dtype=np.int16)
+                current_max = np.max(np.abs(data_array))
+                max_amplitude_seen = max(max_amplitude_seen, current_max)
                 
                 # Check if this frame is silent
                 if self.is_silent(data_array):
-                    silent_frames += 1
-                    # If we've had enough consecutive silent frames, break
-                    if silent_frames > int(self.silence_duration * self.sample_rate / self.chunk_size) and speech_detected:
+                    consecutive_silence_frames += 1
+                    # If we've had enough consecutive silent frames, consider the sentence complete
+                    if consecutive_silence_frames >= required_silence_frames:
+                        silence_after_speech = True
+                        print("End of sentence detected.")
                         break
                 else:
-                    silent_frames = 0
-                    speech_detected = True
+                    consecutive_silence_frames = 0
+            
         except Exception as e:
             print(f"Error capturing audio: {e}")
             return "", False
         
-        # If no speech was detected, return early
-        if not speech_detected:
-            return "", False
+        # If we've reached max frames without ending silence, that's okay - we'll process what we have
+        if len(frames) >= max_frames:
+            print(f"Reached maximum recording length ({max_sentence_duration}s), processing sentence.")
+            
+        # We've definitely detected speech at this point
+        speech_detected = True
             
         # Save the audio chunk to a temporary WAV file
         temp_file = os.path.join(self.temp_dir, f"chunk_{time.time()}.wav")

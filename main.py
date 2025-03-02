@@ -156,23 +156,30 @@ class VoiceDictationApp:
         
         if not transcription:
             print(" No speech detected")
+            print("Check if whisper.cpp is working correctly. Try running:")
+            print("python3 test_transcribe.py")
             return
             
-        print(f" Done: '{transcription}'")
+        print(f" Done")
+        print(f"[DEBUG] Raw transcription from Whisper: '{transcription}'")
         
         # Step 2: Format the text if either LLM option is enabled
         if config.USE_LLM or config.USE_LOCAL_LLM:
             llm_type = "Ollama" if config.USE_LOCAL_LLM else "OpenAI"
+            print(f"[DEBUG] LLM formatting IS enabled ({llm_type})")
             print(f"Formatting with {llm_type}...", end="", flush=True)
             formatted_text = self.formatter.format_text(transcription, self.mode)
             print(" Done")
+            print(f"[DEBUG] Formatted text from {llm_type}: '{formatted_text}'")
         else:
+            print(f"[DEBUG] LLM formatting is NOT enabled")
             formatted_text = transcription
             
         # Step 3: Inject the text into the active window
         print("Injecting text...", end="", flush=True)
         success = self.text_injector.inject_text(formatted_text)
         print(" Done" if success else " Failed")
+        print(f"[DEBUG] Final text injected: '{formatted_text}'")
 
 
 def main():
@@ -271,6 +278,11 @@ def main():
     # LLM configuration
     if args.use_llm:
         config.USE_LLM = True
+        # Print debug info about API key
+        if config.LLM_API_KEY:
+            print(f"Using OpenAI API key from {'environment variable' if os.environ.get('OPENAI_API_KEY') else 'config file'}")
+        else:
+            print("Warning: OpenAI API key not found. Set OPENAI_API_KEY environment variable or update config_local.py")
     
     if args.use_local_llm:
         config.USE_LOCAL_LLM = True
