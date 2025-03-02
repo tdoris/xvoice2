@@ -14,7 +14,7 @@ WHISPER_MODEL = "base"  # Options: "tiny", "base", "small", "medium", "large"
 # Set appropriate paths based on OS
 if IS_MACOS:
     # macOS typically uses Homebrew paths
-    WHISPER_EXECUTABLE = "/opt/homebrew/bin/whisper-cli"
+    WHISPER_EXECUTABLE = "/Users/tomdoris/whisper.cpp/build/bin/whisper-cli" 
     # For Mac we use osascript for text injection
     TEXT_INJECTOR_TYPE = "applescript"
     TEXT_INJECTOR_EXECUTABLE = "osascript"
@@ -40,7 +40,8 @@ TYPING_DELAY = 0  # Delay between characters in milliseconds (0 for no delay)
 
 # LLM API settings
 USE_LLM = False  # Enable/disable LLM formatting
-LLM_API_KEY = ""  # Your API key (only needed for OpenAI)
+# Check environment variable first, then fall back to empty string
+LLM_API_KEY = os.environ.get("OPENAI_API_KEY", "")  # Get API key from environment or use empty string
 LLM_MODEL = "gpt-3.5-turbo"  # Model to use for formatting
 LLM_PROMPT = "Fix grammar and punctuation only in the following text, maintain original meaning and style: "
 

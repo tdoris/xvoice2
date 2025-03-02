@@ -37,6 +37,7 @@ class TextFormatter:
         """
         # Return the original text if LLM formatting is disabled or text is empty
         if not text.strip():
+            print("[DEBUG] Text is empty, skipping formatting")
             return text
             
         # Check which LLM option is enabled (if any)
@@ -44,26 +45,33 @@ class TextFormatter:
         use_ollama = self.use_local_llm
         
         if not use_openai and not use_ollama:
+            print("[DEBUG] No LLM service is enabled for formatting")
             return text
             
         try:
             # Adjust prompt based on mode
             mode_prompt = self._get_mode_prompt(mode)
             full_prompt = f"{mode_prompt} {text}"
+            print(f"[DEBUG] Sending prompt to LLM: '{full_prompt}'")
             
             # Choose LLM provider based on configuration
             if use_ollama:
+                print(f"[DEBUG] Using Ollama with model: {self.ollama_model}")
                 response = self._call_ollama_api(full_prompt)
             elif use_openai:
+                print(f"[DEBUG] Using OpenAI with model: {self.model}")
                 response = self._call_openai_api(full_prompt)
             else:
                 return text
             
             if response:
+                print(f"[DEBUG] Received formatted response from LLM")
                 return response
+            
+            print("[DEBUG] LLM returned empty response, using original text")
             return text
         except Exception as e:
-            print(f"Error formatting text: {e}")
+            print(f"[DEBUG] Error formatting text: {e}")
             return text
     
     def _get_mode_prompt(self, mode: str) -> str:
@@ -109,6 +117,7 @@ class TextFormatter:
         }
         
         try:
+            print(f"[DEBUG] Sending request to OpenAI API")
             response = requests.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers=headers,
@@ -116,12 +125,15 @@ class TextFormatter:
                 timeout=5  # Short timeout to ensure low latency
             )
             
+            print(f"[DEBUG] OpenAI API status code: {response.status_code}")
             response.raise_for_status()
             result = response.json()
             
-            return result["choices"][0]["message"]["content"].strip()
+            formatted_text = result["choices"][0]["message"]["content"].strip()
+            print(f"[DEBUG] OpenAI API response: '{formatted_text}'")
+            return formatted_text
         except requests.RequestException as e:
-            print(f"API request error: {e}")
+            print(f"[DEBUG] OpenAI API request error: {e}")
             return None
             
     def _call_ollama_api(self, prompt: str) -> Optional[str]:
@@ -147,6 +159,7 @@ class TextFormatter:
         }
         
         try:
+            print(f"[DEBUG] Sending request to Ollama API")
             response = requests.post(
                 self.ollama_url,
                 headers=headers,
@@ -154,11 +167,14 @@ class TextFormatter:
                 timeout=5  # Short timeout to ensure low latency
             )
             
+            print(f"[DEBUG] Ollama API status code: {response.status_code}")
             response.raise_for_status()
             result = response.json()
             
             # Ollama response format is different from OpenAI
-            return result.get("response", "").strip()
+            formatted_text = result.get("response", "").strip()
+            print(f"[DEBUG] Ollama API response: '{formatted_text}'")
+            return formatted_text
         except requests.RequestException as e:
-            print(f"Ollama API request error: {e}")
+            print(f"[DEBUG] Ollama API request error: {e}")
             return None
