@@ -6,6 +6,7 @@ Supports both cloud APIs (OpenAI) and local models via Ollama.
 
 import requests
 import json
+import platform
 from typing import Optional, Dict, Any
 import config
 
@@ -84,10 +85,25 @@ class TextFormatter:
         Returns:
             Prompt string for the specified mode
         """
+        is_macos = platform.system() == "Darwin"
+        os_type = "macOS" if is_macos else "Linux"
+        
         if mode == "email":
             return "Format the following text as professional email content with proper grammar and punctuation:"
         elif mode == "command":
-            return "Format the following as a clear command, preserving technical terms and structure:"
+            return f"""
+You are a command-line expert for {os_type}. 
+Convert the following spoken instruction into a valid shell command for {os_type}.
+Focus on common terminal commands and utilities available on {os_type} systems.
+If the instruction appears to be a command already, just fix any syntax errors.
+For complex instructions, create a pipeline or script that achieves the goal.
+Do not include explanations or markdown formatting, ONLY output the exact command to execute.
+For example:
+- "list all files in the current directory" → "ls -la"
+- "create a new folder called projects" → "mkdir projects"
+- "find all python files containing the word error" → "find . -name '*.py' -exec grep -l 'error' {{}} \\;"
+
+Instruction: """
         else:  # general mode
             return self.prompt
     
@@ -106,10 +122,16 @@ class TextFormatter:
             "Authorization": f"Bearer {self.api_key}"
         }
         
+        # Use different system message based on whether we're in command mode
+        if prompt.strip().startswith("You are a command-line expert for"):
+            system_message = "You are a shell command expert. Only respond with the exact command to run, no explanations or markdown."
+        else:
+            system_message = "You are a helpful assistant that fixes grammar and punctuation only."
+        
         data = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": "You are a helpful assistant that fixes grammar and punctuation only."},
+                {"role": "system", "content": system_message},
                 {"role": "user", "content": prompt}
             ],
             "temperature": 0.3,  # Low temperature for more consistent results
@@ -150,10 +172,16 @@ class TextFormatter:
             "Content-Type": "application/json"
         }
         
+        # Use different system message based on whether we're in command mode
+        if prompt.strip().startswith("You are a command-line expert for"):
+            system_message = "You are a shell command expert. Only respond with the exact command to run, no explanations or markdown."
+        else:
+            system_message = "You are a helpful assistant that fixes grammar and punctuation only."
+        
         data = {
             "model": self.ollama_model,
             "prompt": prompt,
-            "system": "You are a helpful assistant that fixes grammar and punctuation only.",
+            "system": system_message,
             "stream": False,
             "temperature": 0.3,  # Low temperature for more consistent results
         }
