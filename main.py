@@ -231,6 +231,12 @@ def main():
         help="List available Ollama models and exit"
     )
     
+    parser.add_argument(
+        "--use-whisper-api",
+        action="store_true",
+        help="Use OpenAI Whisper API for transcription instead of local whisper.cpp"
+    )
+    
     args = parser.parse_args()
     
     # Initialize transcriber just for model checking
@@ -292,6 +298,15 @@ def main():
             
     if args.ollama_model:
         config.OLLAMA_MODEL = args.ollama_model
+        
+    # Whisper API configuration
+    if args.use_whisper_api:
+        config.USE_WHISPER_API = True
+        # Print debug info about API key
+        if config.WHISPER_API_KEY:
+            print(f"Using Whisper API with {'environment variable' if os.environ.get('OPENAI_API_KEY') else 'config file'} API key")
+        else:
+            print("Warning: OpenAI API key not found. Set OPENAI_API_KEY environment variable or update config_local.py")
         
     # If we're in command mode, print a note about command execution
     if args.mode == "command":

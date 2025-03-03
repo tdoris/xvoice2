@@ -60,14 +60,16 @@ class TestTextInjector:
         """Test text injection on macOS with typing delay."""
         with patch('config.TYPING_DELAY', 10):
             with patch('time.sleep') as mock_sleep:
-                injector = TextInjector()
-                result = injector.inject_text("ab")
-                
-                assert result is True
-                # Should call subprocess.run once per character
-                assert mock_subprocess_run.call_count == 2
-                # Should sleep after each character
-                assert mock_sleep.call_count == 2
+                # Patch EXECUTE_COMMANDS to False to avoid additional Return keystroke
+                with patch('config.EXECUTE_COMMANDS', False):
+                    injector = TextInjector()
+                    result = injector.inject_text("ab")
+                    
+                    assert result is True
+                    # Should call subprocess.run once per character
+                    assert mock_subprocess_run.call_count == 2
+                    # Should sleep after each character
+                    assert mock_sleep.call_count == 2
     
     def test_inject_text_macos_failure(self, mock_platform_macos):
         """Test handling of subprocess errors on macOS."""
@@ -83,24 +85,28 @@ class TestTextInjector:
         """Test successful text injection on Linux."""
         mock_subprocess_run.return_value = MagicMock(returncode=0)
         
-        injector = TextInjector()
-        result = injector.inject_text("test text")
-        
-        assert result is True
-        mock_subprocess_run.assert_called_once()
+        # Patch EXECUTE_COMMANDS to False to avoid additional Return keystroke
+        with patch('config.EXECUTE_COMMANDS', False):
+            injector = TextInjector()
+            result = injector.inject_text("test text")
+            
+            assert result is True
+            mock_subprocess_run.assert_called_once()
     
     def test_inject_text_linux_with_delay(self, mock_subprocess_run, mock_platform_linux):
         """Test text injection on Linux with typing delay."""
         with patch('config.TYPING_DELAY', 10):
             with patch('time.sleep') as mock_sleep:
-                injector = TextInjector()
-                result = injector.inject_text("ab")
-                
-                assert result is True
-                # Should call subprocess.run once per character
-                assert mock_subprocess_run.call_count == 2
-                # Should sleep after each character
-                assert mock_sleep.call_count == 2
+                # Patch EXECUTE_COMMANDS to False to avoid additional Return keystroke
+                with patch('config.EXECUTE_COMMANDS', False):
+                    injector = TextInjector()
+                    result = injector.inject_text("ab")
+                    
+                    assert result is True
+                    # Should call subprocess.run once per character
+                    assert mock_subprocess_run.call_count == 2
+                    # Should sleep after each character
+                    assert mock_sleep.call_count == 2
     
     def test_inject_text_linux_failure(self, mock_platform_linux):
         """Test handling of subprocess errors on Linux."""

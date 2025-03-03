@@ -29,6 +29,12 @@ else:
     TEXT_INJECTOR_TYPE = "wtype"
     TEXT_INJECTOR_EXECUTABLE = "wtype"
 
+# Whisper API settings
+USE_WHISPER_API = False  # Enable/disable OpenAI Whisper API for transcription
+WHISPER_API_KEY = os.environ.get("OPENAI_API_KEY", "")  # Reuse OpenAI key or set separately
+WHISPER_API_MODEL = "whisper-1"  # OpenAI Whisper model to use
+WHISPER_API_LANGUAGE = "en"  # Language hint for API (optional)
+
 # PortAudio settings
 SAMPLE_RATE = 16000  # Sample rate in Hz
 FRAMES_PER_BUFFER = 1024
