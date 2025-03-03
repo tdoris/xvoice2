@@ -2,6 +2,8 @@
 Configuration settings for the voice dictation application.
 """
 
+import os
+
 # Whisper model settings
 WHISPER_MODEL = "small"  # Options: "tiny", "base", "small", "medium", "large"
 WHISPER_EXECUTABLE = "/Users/tomdoris/whisper.cpp/build/bin/whisper-cli"  # Path to whisper.cpp executable
@@ -24,7 +26,8 @@ TYPING_DELAY = 0  # Delay between characters in milliseconds (0 for no delay)
 
 # LLM API settings
 USE_LLM = False  # Enable/disable LLM formatting
-LLM_API_KEY = ""  # Your API key
+# Get API key from environment variable
+LLM_API_KEY = os.environ.get("OPENAI_API_KEY", "")  # Get API key from environment or use empty string
 LLM_MODEL = "gpt-3.5-turbo"  # Model to use for formatting
 LLM_PROMPT = "Fix grammar and punctuation only in the following text, maintain original meaning and style: "
 
