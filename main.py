@@ -48,7 +48,7 @@ class VoiceDictationApp:
         """Handle termination signals for graceful shutdown."""
         print("\nShutting down voice dictation...")
         self.running = False
-        sys.exit(0)
+        # Don't exit immediately - let the main loop finish cleanly
         
     def check_dependencies(self) -> bool:
         """
@@ -124,24 +124,34 @@ class VoiceDictationApp:
         
         self.running = True
         
-        with MicrophoneStream() as stream:
-            # Main application loop
-            for audio_file in stream.listen_continuous():
-                if not self.running:
-                    break
+        try:
+            with MicrophoneStream() as stream:
+                # Main application loop
+                for audio_file in stream.listen_continuous():
+                    if not self.running:
+                        print("Stopping voice dictation loop...")
+                        break
+                        
+                    # Skip if no audio file was generated
+                    if not audio_file:
+                        continue
+                        
+                    # Process the audio file
+                    self._process_audio(audio_file)
                     
-                # Skip if no audio file was generated
-                if not audio_file:
-                    continue
-                    
-                # Process the audio file
-                self._process_audio(audio_file)
-                
-                # Remove the temporary audio file
-                try:
-                    os.remove(audio_file)
-                except OSError:
-                    pass
+                    # Remove the temporary audio file
+                    try:
+                        os.remove(audio_file)
+                    except OSError:
+                        pass
+        except KeyboardInterrupt:
+            # Handle Ctrl+C gracefully
+            print("\nShutting down voice dictation...")
+            self.running = False
+        except Exception as e:
+            print(f"Unexpected error in main loop: {e}")
+        finally:
+            print("Voice dictation application closed.")
     
     def _process_audio(self, audio_file: str) -> None:
         """

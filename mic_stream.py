@@ -251,14 +251,23 @@ class MicrophoneStream:
             print("Audio stream started successfully. Listening...")
             
             while True:
-                file_path, speech_detected = self.capture_chunk()
-                if speech_detected:
-                    yield file_path
-                else:
-                    time.sleep(0.1)  # Short pause when no speech detected
+                try:
+                    file_path, speech_detected = self.capture_chunk()
+                    if speech_detected:
+                        yield file_path
+                    else:
+                        time.sleep(0.1)  # Short pause when no speech detected
+                except KeyboardInterrupt:
+                    print("\nGracefully shutting down...")
+                    break
+                except Exception as e:
+                    print(f"Error in audio capture: {e}")
+                    # Continue attempting to capture audio instead of crashing
+                    time.sleep(0.5)
         except KeyboardInterrupt:
-            pass
+            print("\nGracefully shutting down...")
         except Exception as e:
             print(f"Fatal error in audio capture: {e}")
         finally:
+            print("Cleaning up audio resources...")
             self.close()
