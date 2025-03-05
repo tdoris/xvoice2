@@ -16,16 +16,23 @@ IS_MACOS = platform.system() == "Darwin"
 # Whisper model settings
 WHISPER_MODEL = "base"  # Options: "tiny", "base", "small", "medium", "large"
 
-# Set appropriate paths based on OS
+# Whisper installation root path
 if IS_MACOS:
-    # macOS typically uses Homebrew paths
-    WHISPER_EXECUTABLE = "/Users/tomdoris/whisper.cpp/build/bin/whisper-cli" 
+    WHISPER_ROOT = "/Users/tomdoris/whisper.cpp"
+else:
+    WHISPER_ROOT = "/home/tdoris/repos/whisper.cpp"
+
+# Whisper paths relative to root
+WHISPER_EXECUTABLE = os.path.join(WHISPER_ROOT, "build/bin/whisper-cli")
+WHISPER_MODELS_DIR = os.path.join(WHISPER_ROOT, "models")
+
+# Text injection settings based on OS
+if IS_MACOS:
     # For Mac we use osascript for text injection
     TEXT_INJECTOR_TYPE = "applescript"
     TEXT_INJECTOR_EXECUTABLE = "osascript"
 else:
-    # Linux paths
-    WHISPER_EXECUTABLE = "/home/tdoris/repos/whisper.cpp/build/bin/whisper-cli"
+    # Default to wtype (Wayland), but we'll detect X11 in text_injector.py
     TEXT_INJECTOR_TYPE = "wtype"
     TEXT_INJECTOR_EXECUTABLE = "wtype"
 

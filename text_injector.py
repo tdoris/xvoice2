@@ -1,12 +1,13 @@
 """
 Text injection module for various platforms.
-Uses wtype for Wayland on Linux and AppleScript on macOS.
+Uses wtype for Wayland, xdotool for X11, and AppleScript on macOS.
 """
 
 import subprocess
 import shlex
 import time
 import platform
+import os
 from typing import Optional
 import config
 
@@ -15,9 +16,20 @@ class TextInjector:
     
     def __init__(self):
         """Initialize the text injector with configuration settings."""
-        self.executable = config.TEXT_INJECTOR_EXECUTABLE
         self.typing_delay = config.TYPING_DELAY
         self.is_macos = platform.system() == "Darwin"
+        
+        # Default to config value
+        self.executable = config.TEXT_INJECTOR_EXECUTABLE
+        
+        # For Linux, detect if we're on X11 or Wayland
+        if not self.is_macos:
+            self.is_wayland = os.environ.get('XDG_SESSION_TYPE') == 'wayland'
+            self.is_x11 = os.environ.get('XDG_SESSION_TYPE') == 'x11'
+            
+            # If we're on X11, use xdotool instead of wtype
+            if self.is_x11:
+                self.executable = "xdotool"
         
     def inject_text(self, text: str) -> bool:
         """
@@ -85,7 +97,7 @@ class TextInjector:
     
     def _inject_text_linux(self, text: str) -> bool:
         """
-        Inject text using wtype on Linux.
+        Inject text using wtype (Wayland) or xdotool (X11) on Linux.
         
         Args:
             text: The text to inject
@@ -97,19 +109,55 @@ class TextInjector:
             # Escape the text to ensure it works properly with the shell
             escaped_text = shlex.quote(text)
             
-            # Use echo to pipe the text into wtype
-            command = f"echo {escaped_text} | {self.executable}"
-            
             # Check if we should execute the command in terminal mode
             execute_command = hasattr(config, 'EXECUTE_COMMANDS') and config.EXECUTE_COMMANDS
             
-            # If typing delay is specified, use a different approach to simulate typing
-            if self.typing_delay > 0:
-                for char in text:
-                    # Use wtype directly for each character
-                    char_command = f"{self.executable} {shlex.quote(char)}"
-                    subprocess.run(char_command, shell=True, check=True)
-                    time.sleep(self.typing_delay / 1000.0)  # Convert ms to seconds
+            # If we're on X11 with xdotool
+            if self.is_x11:
+                if self.typing_delay > 0:
+                    # For X11 with typing delay, type each character individually
+                    for char in text:
+                        char_escaped = shlex.quote(char)
+                        subprocess.run(f"{self.executable} type {char_escaped}", shell=True, check=True)
+                        time.sleep(self.typing_delay / 1000.0)  # Convert ms to seconds
+                    
+                    # Add Enter keystroke if in command execution mode
+                    if execute_command:
+                        print("[DEBUG] Command mode with execution enabled. Adding Return keystroke.")
+                        subprocess.run(f"{self.executable} key Return", shell=True, check=True)
+                    
+                    return True
+                
+                # Standard approach - type all at once with xdotool
+                subprocess.run(f"{self.executable} type {escaped_text}", shell=True, check=True)
+                
+                # Add Enter keystroke if in command execution mode
+                if execute_command:
+                    print("[DEBUG] Command mode with execution enabled. Adding Return keystroke.")
+                    subprocess.run(f"{self.executable} key Return", shell=True, check=True)
+                
+                return True
+            
+            # If we're on Wayland with wtype
+            else:
+                # If typing delay is specified, use a different approach to simulate typing
+                if self.typing_delay > 0:
+                    for char in text:
+                        # Use wtype directly for each character
+                        char_command = f"{self.executable} {shlex.quote(char)}"
+                        subprocess.run(char_command, shell=True, check=True)
+                        time.sleep(self.typing_delay / 1000.0)  # Convert ms to seconds
+                    
+                    # Add Enter keystroke if in command execution mode
+                    if execute_command:
+                        print("[DEBUG] Command mode with execution enabled. Adding Return keystroke.")
+                        subprocess.run(f"{self.executable} -k Return", shell=True, check=True)
+                    
+                    return True
+                    
+                # Standard approach - pass text as command line argument to wtype
+                command = f"{self.executable} {escaped_text}"
+                subprocess.run(command, shell=True, check=True)
                 
                 # Add Enter keystroke if in command execution mode
                 if execute_command:
@@ -117,16 +165,6 @@ class TextInjector:
                     subprocess.run(f"{self.executable} -k Return", shell=True, check=True)
                 
                 return True
-                
-            # Standard approach - pipe the whole text at once
-            subprocess.run(command, shell=True, check=True)
-            
-            # Add Enter keystroke if in command execution mode
-            if execute_command:
-                print("[DEBUG] Command mode with execution enabled. Adding Return keystroke.")
-                subprocess.run(f"{self.executable} -k Return", shell=True, check=True)
-            
-            return True
             
         except subprocess.SubprocessError as e:
             print(f"Error injecting text on Linux: {e}")
@@ -151,6 +189,18 @@ class TextInjector:
                 return True
             except (subprocess.SubprocessError, FileNotFoundError):
                 return False
+        elif self.is_x11:
+            try:
+                # Try to run xdotool with --help to check if it's available
+                subprocess.run(
+                    [self.executable, "--help"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                return True
+            except (subprocess.SubprocessError, FileNotFoundError):
+                print(f"Error: xdotool not found. Please install it with: sudo apt-get install xdotool")
+                return False
         else:
             try:
                 # Try to run wtype with --help to check if it's available
@@ -161,6 +211,7 @@ class TextInjector:
                 )
                 return True
             except (subprocess.SubprocessError, FileNotFoundError):
+                print(f"Error: wtype not found. Please install it for Wayland text injection.")
                 return False
     
     def inject_keypress(self, key: str) -> bool:
@@ -193,6 +244,15 @@ class TextInjector:
             except subprocess.SubprocessError as e:
                 print(f"Error injecting keypress on macOS: {e}")
                 return False
+        elif self.is_x11:
+            try:
+                # xdotool uses 'key' command for key events
+                command = f"{self.executable} key {key}"
+                subprocess.run(command, shell=True, check=True)
+                return True
+            except subprocess.SubprocessError as e:
+                print(f"Error injecting keypress on Linux (X11): {e}")
+                return False
         else:
             try:
                 # wtype has special syntax for key events: -k for key
@@ -200,5 +260,5 @@ class TextInjector:
                 subprocess.run(command, shell=True, check=True)
                 return True
             except subprocess.SubprocessError as e:
-                print(f"Error injecting keypress on Linux: {e}")
+                print(f"Error injecting keypress on Linux (Wayland): {e}")
                 return False

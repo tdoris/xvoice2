@@ -95,17 +95,27 @@ If no audio input is detected:
    sudo apt-get install libopenblas-dev
    ```
 
-### Text Injection Issues (wtype)
+### Text Injection Issues
 
-1. **Wayland compatibility:**
-   Make sure you're running a Wayland session, not X11. Check with:
+1. **Session Type Detection:**
+   The application will automatically detect if you're using Wayland or X11 and use the appropriate tool:
+   - Wayland: Uses wtype
+   - X11: Uses xdotool
+   - macOS: Uses AppleScript
+
+   You can check your session type with:
    ```bash
    echo $XDG_SESSION_TYPE
    ```
 
-2. **Alternative text injection:**
-   If wtype doesn't work, try xdotool for X11:
-   ```bash
-   sudo apt-get install xdotool
-   ```
-   Then modify `text_injector.py` to use xdotool instead of wtype.
+2. **Installing Text Injection Tools:**
+   - For Wayland sessions:
+     ```bash
+     sudo apt-get install wtype
+     ```
+   - For X11 sessions:
+     ```bash
+     sudo apt-get install xdotool
+     ```
+   
+   The application should automatically select the correct tool based on your session type.
