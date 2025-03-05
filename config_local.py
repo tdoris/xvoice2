@@ -1,12 +1,22 @@
 """
 Configuration settings for the voice dictation application.
+These settings override the defaults from config.py.
 """
 
 import os
+import platform
+
+# Detect operating system correctly
+IS_MACOS = platform.system() == "Darwin"
 
 # Whisper model settings
 WHISPER_MODEL = "small"  # Options: "tiny", "base", "small", "medium", "large"
-WHISPER_EXECUTABLE = "/Users/tomdoris/whisper.cpp/build/bin/whisper-cli"  # Path to whisper.cpp executable
+
+# Platform specific paths
+if IS_MACOS:
+    WHISPER_ROOT = "/Users/tomdoris/whisper.cpp"
+else:
+    WHISPER_ROOT = "/home/jim/repos/whisper.cpp"  # Adjust this to your Linux path
 
 # PortAudio settings
 SAMPLE_RATE = 16000  # Sample rate in Hz

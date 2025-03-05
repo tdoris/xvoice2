@@ -37,7 +37,15 @@ class Transcriber:
         if self._model_path and os.path.exists(self._model_path):
             return self._model_path
             
-        # On macOS, models could be in various locations - we'll check a few
+        # Check if WHISPER_ROOT is defined in config
+        if hasattr(config, 'WHISPER_ROOT'):
+            # Try WHISPER_ROOT models directory first
+            models_path = os.path.join(config.WHISPER_ROOT, f"models/ggml-{self.model}.bin")
+            if os.path.exists(models_path):
+                self._model_path = models_path
+                return models_path
+                
+        # Then check platform-specific locations
         if self.is_macos:
             model_paths = [
                 f"models/ggml-{self.model}.bin",
@@ -45,11 +53,6 @@ class Transcriber:
                 os.path.expanduser(f"~/whisper.cpp/models/ggml-{self.model}.bin"),
                 os.path.join(os.path.dirname(self.whisper_executable), f"../models/ggml-{self.model}.bin")
             ]
-            
-            for path in model_paths:
-                if os.path.exists(path):
-                    self._model_path = path
-                    return path
         else:
             # Linux locations
             model_paths = [
@@ -59,11 +62,12 @@ class Transcriber:
                 # Add user home directory path
                 os.path.expanduser(f"~/whisper.cpp/models/ggml-{self.model}.bin")
             ]
-            
-            for path in model_paths:
-                if os.path.exists(path):
-                    self._model_path = path
-                    return path
+        
+        # Check all possible locations
+        for path in model_paths:
+            if os.path.exists(path):
+                self._model_path = path
+                return path
                     
         return None
     
@@ -308,10 +312,22 @@ class Transcriber:
         models = []
         model_dirs = ["models"]  # Default models directory
         
-        # On macOS, check additional locations
+        # First check config.WHISPER_ROOT if available
+        if hasattr(config, 'WHISPER_ROOT'):
+            whisper_models_dir = os.path.join(config.WHISPER_ROOT, "models")
+            if os.path.exists(whisper_models_dir):
+                model_dirs.append(whisper_models_dir)
+        
+        # Then check platform-specific locations
         if self.is_macos:
             model_dirs.extend([
                 "/opt/homebrew/share/whisper/models",
+                os.path.expanduser("~/whisper.cpp/models"),
+                os.path.join(os.path.dirname(self.whisper_executable), "../models")
+            ])
+        else:
+            # Linux locations
+            model_dirs.extend([
                 os.path.expanduser("~/whisper.cpp/models"),
                 os.path.join(os.path.dirname(self.whisper_executable), "../models")
             ])
