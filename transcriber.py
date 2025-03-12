@@ -69,6 +69,8 @@ class WhisperServerProcess:
                 "--host", self.host,
                 "--port", str(self.port),
                 "--threads", "4",
+                "--print-progress",  # Add more debug output
+                "--print-colors"
             ]
             
             # Start the server as a background process
@@ -144,36 +146,36 @@ class WhisperServerProcess:
                 with open(audio_file, 'rb') as f:
                     audio_data = f.read()
                 
-                # Try different API endpoints (the server API may vary)
-                endpoints = [
-                    f"http://{self.host}:{self.port}/inference",
-                    f"http://{self.host}:{self.port}/api/v1/transcribe",
-                    f"http://{self.host}:{self.port}/transcribe"
-                ]
+                # The standard endpoint for whisper-server
+                endpoint = f"http://{self.host}:{self.port}/inference"
                 
+                # Send the request to the server
                 response = None
-                for endpoint in endpoints:
-                    try:
-                        print(f"Trying endpoint: {endpoint}")
-                        files = {'file': (os.path.basename(audio_file), open(audio_file, 'rb'), 'audio/wav')}
-                        headers = {}
-                        response = requests.post(
-                            endpoint,
-                            files=files,
-                            headers=headers,
-                            timeout=20
-                        )
-                        if response.status_code == 200:
-                            print(f"Success with endpoint: {endpoint}")
-                            self.url = endpoint  # Remember successful endpoint
-                            break
-                        else:
-                            print(f"Failed with status {response.status_code}: {response.text}")
-                    except Exception as e:
-                        print(f"Error with endpoint {endpoint}: {e}")
-                
-                if not response or response.status_code != 200:
-                    print("All endpoints failed")
+                try:
+                    print(f"Sending request to: {endpoint}")
+                    
+                    # Follow the example request format exactly
+                    files = {
+                        'file': (os.path.basename(audio_file), open(audio_file, 'rb'), 'audio/wav'),
+                        'temperature': (None, '0.0'),
+                        'temperature_inc': (None, '0.2'),
+                        'response_format': (None, 'json')
+                    }
+                    
+                    # Note: Don't set the Content-Type header explicitly, requests will set it correctly
+                    response = requests.post(
+                        endpoint,
+                        files=files,
+                        timeout=30
+                    )
+                    
+                    if response.status_code == 200:
+                        print(f"Success with server request")
+                    else:
+                        print(f"Failed with status {response.status_code}: {response.text}")
+                        return None
+                except Exception as e:
+                    print(f"Error with server request: {e}")
                     return None
                 
                 # End timing
@@ -186,10 +188,32 @@ class WhisperServerProcess:
                 
                 # Parse the JSON response
                 try:
+                    # Print the raw response for debugging
+                    print(f"Server response: {response.text[:200]}...")
+                    
                     result = response.json()
                     
-                    # Extract the text
-                    raw_text = result.get('text', '').strip()
+                    # Extract the text - handle different response formats
+                    if 'text' in result:
+                        # Standard format
+                        raw_text = result.get('text', '').strip()
+                    elif 'transcription' in result:
+                        # Alternative format
+                        raw_text = result.get('transcription', '').strip()
+                    else:
+                        # Print the full response for debugging
+                        print(f"Unknown response format: {response.text}")
+                        raw_text = ""
+                        
+                        # Try to extract any text content from the response
+                        if isinstance(result, dict):
+                            for key, value in result.items():
+                                if isinstance(value, str) and len(value) > 5:
+                                    raw_text = value
+                                    break
+                        
+                        if not raw_text:
+                            return None
                     
                     # Clean up timestamp patterns and [BLANK_AUDIO]
                     import re
@@ -197,6 +221,7 @@ class WhisperServerProcess:
                     clean_text = re.sub(r'\[BLANK_AUDIO\]', '', clean_text)
                     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
                     
+                    print(f"Extracted text: '{clean_text}'")
                     return clean_text
                     
                 except json.JSONDecodeError as e:
