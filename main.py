@@ -152,6 +152,9 @@ class VoiceDictationApp:
         except Exception as e:
             print(f"Unexpected error in main loop: {e}")
         finally:
+            # Clean up resources
+            print("Cleaning up resources...")
+            self.transcriber.cleanup()
             print("Voice dictation application closed.")
     
     def _process_audio(self, audio_file: str) -> None:
@@ -248,6 +251,12 @@ def main():
         help="Use OpenAI Whisper API for transcription instead of local whisper.cpp"
     )
     
+    parser.add_argument(
+        "--no-persistent-whisper",
+        action="store_true",
+        help="Disable persistent whisper.cpp process (may be slower but uses less memory)"
+    )
+    
     args = parser.parse_args()
     
     # Initialize transcriber just for model checking
@@ -291,6 +300,11 @@ def main():
         config.WHISPER_MODEL = args.model
         # Reinitialize with new model
         transcriber = Transcriber()
+    
+    # Whisper persistence setting
+    if args.no_persistent_whisper:
+        config.USE_PERSISTENT_WHISPER = False
+        print("Persistent whisper.cpp process disabled")
         
     # LLM configuration
     if args.use_llm:

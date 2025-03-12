@@ -20,7 +20,7 @@ WHISPER_MODEL = "base"  # Options: "tiny", "base", "small", "medium", "large"
 if IS_MACOS:
     WHISPER_ROOT = "/Users/tomdoris/whisper.cpp"
 else:
-    WHISPER_ROOT = "/home/tdoris/repos/whisper.cpp"
+    WHISPER_ROOT = "/home/jim/repos/whisper.cpp"
 
 # Whisper paths relative to root
 WHISPER_EXECUTABLE = os.path.join(WHISPER_ROOT, "build/bin/whisper-cli")
@@ -68,6 +68,9 @@ LLM_PROMPT = "Fix grammar and punctuation only in the following text, maintain o
 USE_LOCAL_LLM = False  # Enable/disable local LLM formatting
 OLLAMA_MODEL = "llama3"  # Default Ollama model to use
 OLLAMA_URL = "http://localhost:11434/api/generate"  # Ollama API URL
+
+# Performance settings
+USE_PERSISTENT_WHISPER = True  # Keep whisper.cpp loaded for faster transcription
 
 # Dictation mode settings
 DEFAULT_MODE = "general"  # Default dictation mode
