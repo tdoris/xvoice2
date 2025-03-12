@@ -211,6 +211,7 @@ class MicrophoneStream:
         # Calculate statistics on the ambient noise
         min_level = np.min(self.calibration_samples)
         mean_level = np.mean(self.calibration_samples)
+        median_level = np.median(self.calibration_samples)
         max_level = np.max(self.calibration_samples)
         p90_level = np.percentile(self.calibration_samples, 90)
         
@@ -218,16 +219,27 @@ class MicrophoneStream:
         # - If the environment is very quiet, use a reasonable minimum threshold
         # - If noise fluctuates a lot, use a more conservative approach
         noise_range = max_level - min_level
-        if noise_range > mean_level * 2:
+        
+        # More conservative approach - ensure threshold isn't too high or too low
+        if mean_level < 100:
+            # Very quiet environment - use a minimum threshold to avoid over-sensitivity
+            base_threshold = 500
+            debug_log(f"Very quiet environment detected (mean level: {mean_level:.1f}), using minimum threshold")
+        elif noise_range > mean_level * 2:
             # High variance environment - use 95th percentile + buffer
-            self.adaptive_threshold = np.percentile(self.calibration_samples, 95) * 1.5
+            base_threshold = np.percentile(self.calibration_samples, 95) * 1.5
+            debug_log(f"High variance environment detected (range: {noise_range:.1f}), using conservative threshold")
         else:
-            # Standard environment - use 90th percentile * factor
-            self.adaptive_threshold = max(p90_level * self.calibration_factor, 500)
+            # Standard environment - use median * factor for better stability than mean
+            base_threshold = max(median_level * self.calibration_factor, 500)
+            debug_log(f"Standard environment detected, using median-based threshold")
         
         # Apply config factor if specified
         if hasattr(config, 'THRESHOLD_ADJUSTMENT_FACTOR'):
-            self.adaptive_threshold *= config.THRESHOLD_ADJUSTMENT_FACTOR
+            base_threshold *= config.THRESHOLD_ADJUSTMENT_FACTOR
+            
+        # Set a reasonable upper bound on initial threshold to prevent over-dampening
+        self.adaptive_threshold = min(base_threshold, 2000)
         
         debug_log(f"Calibration complete - noise profile: min={min_level:.1f}, mean={mean_level:.1f}, max={max_level:.1f}")
         debug_log(f"Silence threshold set to: {self.adaptive_threshold:.1f}")
@@ -347,13 +359,31 @@ class MicrophoneStream:
         # Increase threshold if we're getting too many false positives
         if false_trigger_count > 0:
             old_threshold = self.adaptive_threshold
-            # Increase by 20% for each false trigger (up to doubling)
-            self.adaptive_threshold = min(old_threshold * (1 + 0.2 * false_trigger_count), old_threshold * 2)
+            # More conservative adjustment: increase by 10% for first trigger,
+            # then more gradually for subsequent triggers
+            adjustment_factor = min(0.1 * false_trigger_count, 0.5)  # Cap at 50% increase
+            self.adaptive_threshold = old_threshold * (1 + adjustment_factor)
+            
+            # Put a cap on the maximum threshold to prevent it from getting too high
+            max_reasonable_threshold = 3000  # Based on typical int16 audio values
+            if self.adaptive_threshold > max_reasonable_threshold:
+                self.adaptive_threshold = max_reasonable_threshold
+                debug_log(f"Threshold capped at maximum reasonable value: {max_reasonable_threshold}")
+                
             debug_log(f"Adjusted threshold after false trigger: {old_threshold:.1f} → {self.adaptive_threshold:.1f}")
+            
+        # Allow periodic recalibration to recover from a threshold that's been raised too high
+        if false_trigger_count >= 3:
+            # If we've had several false triggers in a row, do a fresh calibration
+            debug_log("Multiple false triggers detected - performing fresh calibration")
+            self.calibrate_silence_threshold()
+            self.last_calibration_time = time.time()
+            return
             
         # Periodically recalibrate after long idle periods (randomly, ~10% chance when idle)
         if not hasattr(self, 'last_calibration_time') or time.time() - self.last_calibration_time > 60:
             if np.random.random() < 0.1:  # 10% chance to recalibrate when idle
+                debug_log("Performing periodic recalibration during idle time")
                 self.calibrate_silence_threshold()
                 self.last_calibration_time = time.time()
     
@@ -398,13 +428,19 @@ class MicrophoneStream:
                                 avg_amplitude = np.mean(np.abs(audio_array))
                                 max_amplitude = np.max(np.abs(audio_array))
                                 
-                                # False positive detection
-                                if duration < 0.3 or avg_amplitude < (self.adaptive_threshold * 0.7):
-                                    debug_log(f"Possible false trigger: duration={duration:.2f}s, avg_amp={avg_amplitude:.1f}, max_amp={max_amplitude:.1f}")
+                                # False positive detection - only for very short clips or very low amplitude
+                                # For audio to be considered actual speech it should either:
+                                # 1. Be very short (< 0.3s) which is too brief for real speech, OR
+                                # 2. Have extremely low average amplitude compared to threshold (< 30% of threshold)
+                                if duration < 0.3 or avg_amplitude < (self.adaptive_threshold * 0.3):
+                                    debug_log(f"Possible false trigger: duration={duration:.2f}s, avg_amp={avg_amplitude:.1f}, max_amp={max_amplitude:.1f}, threshold={self.adaptive_threshold:.1f}")
                                     false_trigger_count += 1
                                     self.recalibrate_if_needed(false_trigger_count)
                                     os.remove(file_path)  # Clean up the audio file
                                     continue
+                                
+                                # Log actual speech characteristics for debugging
+                                debug_log(f"Speech audio metrics: duration={duration:.2f}s, avg_amp={avg_amplitude:.1f}, max_amp={max_amplitude:.1f}, threshold={self.adaptive_threshold:.1f}")
                         except Exception as e:
                             debug_log(f"Error checking audio: {e}")
                     
