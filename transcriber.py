@@ -614,6 +614,30 @@ class Transcriber:
             print(f"Error calling Whisper API: {e}")
             return None
             
+    def is_model_available(self) -> bool:
+        """
+        Check if the selected model file exists.
+        
+        Returns:
+            True if the model file is found, False otherwise
+        """
+        return self._find_model_path() is not None
+
+    def get_model_installation_instructions(self) -> str:
+        """
+        Get instructions for installing the missing model.
+        
+        Returns:
+            String with installation instructions
+        """
+        return (
+            f"Model '{self.model}' not found. To install it:\n"
+            f"1. Navigate to your whisper.cpp directory\n"
+            f"2. Run: bash ./models/download-ggml-model.sh {self.model}\n"
+            f"3. Restart the application\n\n"
+            f"Available models: tiny, base, small, medium, large"
+        )
+    
     def is_api_available(self) -> bool:
         """
         Check if Whisper API is configured and available.
