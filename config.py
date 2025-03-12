@@ -24,6 +24,7 @@ else:
 
 # Whisper paths relative to root
 WHISPER_EXECUTABLE = os.path.join(WHISPER_ROOT, "build/bin/whisper-cli")
+WHISPER_SERVER_EXECUTABLE = os.path.join(WHISPER_ROOT, "build/bin/whisper-server")
 WHISPER_MODELS_DIR = os.path.join(WHISPER_ROOT, "models")
 
 # Text injection settings based on OS

@@ -18,18 +18,17 @@ import config
 class WhisperServerProcess:
     """Manages a persistent Whisper.cpp server process for faster transcription."""
     
-    def __init__(self, whisper_root: str, model_path: str):
+    def __init__(self, server_executable: str, model_path: str):
         """
         Start a persistent Whisper server process in the background.
         
         Args:
-            whisper_root: Path to the whisper.cpp directory
+            server_executable: Path to the whisper-server executable
             model_path: Path to the whisper model file
         """
         # Set up paths
-        self.whisper_root = whisper_root
+        self.server_executable = server_executable
         self.model_path = model_path
-        self.server_executable = os.path.join(whisper_root, "build/bin/whisper-server")
         
         # Server settings
         self.host = "127.0.0.1"
@@ -339,12 +338,15 @@ class Transcriber:
             print(f"Error: Model '{self.model}' not found.")
             return False
             
-        # Find whisper-server executable directory
-        whisper_bin_dir = os.path.dirname(self.whisper_executable)
-        whisper_root = os.path.dirname(whisper_bin_dir)  # Go up one level from bin directory
+        # Check if we have the server executable defined in config
+        if hasattr(config, 'WHISPER_SERVER_EXECUTABLE'):
+            server_executable = config.WHISPER_SERVER_EXECUTABLE
+        else:
+            # Try to find it in the same directory as the whisper-cli
+            server_executable = os.path.join(os.path.dirname(self.whisper_executable), "whisper-server")
         
         # Create a new persistent server process
-        self.persistent_process = WhisperServerProcess(whisper_root, model_path)
+        self.persistent_process = WhisperServerProcess(server_executable, model_path)
         return self.persistent_process.start()
     
     def _transcribe_with_local(self, audio_file: str) -> Optional[str]:
