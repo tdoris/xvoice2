@@ -239,9 +239,12 @@ def main():
         help="Dictation mode (default: %(default)s)"
     )
     
+    # Initialize transcriber just for model listing
+    available_models_for_choices = Transcriber().get_available_models()
+    
     parser.add_argument(
         "--model",
-        choices=["tiny", "base", "small", "medium", "large"],
+        choices=available_models_for_choices if available_models_for_choices else ["tiny", "base", "small", "medium", "large"],
         help=f"Whisper model to use (default: {config.WHISPER_MODEL})"
     )
     
