@@ -14,11 +14,16 @@ class TestTextInjector:
     
     def test_init(self):
         """Test initialization of TextInjector."""
-        injector = TextInjector()
-        
-        assert injector.executable == config.TEXT_INJECTOR_EXECUTABLE
-        assert injector.typing_delay == config.TYPING_DELAY
-        assert injector.is_macos == (platform.system() == "Darwin")
+        with patch('os.environ.get') as mock_environ_get:
+            # Make it think we're not in X11 or Wayland
+            mock_environ_get.return_value = None
+            
+            injector = TextInjector()
+            
+            # Should use the default from config
+            assert injector.executable == config.TEXT_INJECTOR_EXECUTABLE
+            assert injector.typing_delay == config.TYPING_DELAY
+            assert injector.is_macos == (platform.system() == "Darwin")
     
     def test_inject_text_empty(self):
         """Test injecting empty text returns True without doing anything."""

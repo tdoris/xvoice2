@@ -50,8 +50,12 @@ class TestTranscriber:
         audio_file.write_text("mock audio content")
         
         with patch('os.path.exists', return_value=True):
-            transcriber = Transcriber()
-            result = transcriber.transcribe(str(audio_file))
+            with patch('transcriber.Transcriber._find_model_path', return_value='mock_model_path'):
+                with patch('config.USE_PERSISTENT_WHISPER', False):  # Disable persistence
+                    transcriber = Transcriber()
+                    # Make sure persistent whisper is disabled
+                    transcriber.use_persistent = False
+                    result = transcriber.transcribe(str(audio_file))
         
         assert result == "test transcription"
         mock_subprocess_run.assert_called_once()
@@ -63,9 +67,13 @@ class TestTranscriber:
         audio_file.write_text("mock audio content")
         
         with patch('os.path.exists', return_value=True):
-            with patch('subprocess.run', side_effect=Exception("Command failed")):
-                transcriber = Transcriber()
-                result = transcriber.transcribe(str(audio_file))
+            with patch('transcriber.Transcriber._find_model_path', return_value='mock_model_path'):
+                with patch('config.USE_PERSISTENT_WHISPER', False):
+                    with patch('subprocess.run', side_effect=Exception("Command failed")):
+                        transcriber = Transcriber()
+                        # Disable persistent mode to ensure we use one-time transcription
+                        transcriber.use_persistent = False
+                        result = transcriber.transcribe(str(audio_file))
         
         assert result is None
     

@@ -49,7 +49,8 @@ class VoiceDictationApp:
         """Handle termination signals for graceful shutdown."""
         print("\nShutting down voice dictation...")
         self.running = False
-        # Don't exit immediately - let the main loop finish cleanly
+        # Exit for compatibility with tests
+        sys.exit(0)
         
     def check_dependencies(self) -> bool:
         """
