@@ -18,6 +18,7 @@ class TextInjector:
         """Initialize the text injector with configuration settings."""
         self.typing_delay = config.TYPING_DELAY
         self.is_macos = platform.system() == "Darwin"
+        self.current_mode = config.DEFAULT_MODE  # Track the current mode
         
         # Default to config value
         self.executable = config.TEXT_INJECTOR_EXECUTABLE
@@ -31,6 +32,15 @@ class TextInjector:
             if self.is_x11:
                 self.executable = "xdotool"
         
+    def set_mode(self, mode: str) -> None:
+        """
+        Set the current dictation mode.
+        
+        Args:
+            mode: The dictation mode to use (e.g., "general", "email", "command")
+        """
+        self.current_mode = mode
+    
     def inject_text(self, text: str) -> bool:
         """
         Inject text into the currently active window using the appropriate method for this platform.
@@ -68,7 +78,7 @@ class TextInjector:
             
             # Check if we should execute the command in terminal mode
             # This is a special case for command mode where we want to execute the command
-            if hasattr(config, 'EXECUTE_COMMANDS') and config.EXECUTE_COMMANDS:
+            if self.current_mode == "command" and hasattr(config, 'EXECUTE_COMMANDS') and config.EXECUTE_COMMANDS:
                 print("[DEBUG] Command mode with execution enabled. Adding Return keystroke.")
                 applescript = f'tell application "System Events" to keystroke "{escaped_text}"\n' + \
                              'tell application "System Events" to keystroke return'
@@ -82,7 +92,7 @@ class TextInjector:
                     time.sleep(self.typing_delay / 1000.0)  # Convert ms to seconds
                 
                 # Add Return keystroke if in command execution mode
-                if hasattr(config, 'EXECUTE_COMMANDS') and config.EXECUTE_COMMANDS:
+                if self.current_mode == "command" and hasattr(config, 'EXECUTE_COMMANDS') and config.EXECUTE_COMMANDS:
                     subprocess.run(["osascript", "-e", 'tell application "System Events" to keystroke return'], check=True)
                 
                 return True
@@ -110,7 +120,10 @@ class TextInjector:
             escaped_text = shlex.quote(text)
             
             # Check if we should execute the command in terminal mode
-            execute_command = hasattr(config, 'EXECUTE_COMMANDS') and config.EXECUTE_COMMANDS
+            # Only execute if we're in command mode AND the execute flag is enabled
+            execute_command = (self.current_mode == "command" and 
+                              hasattr(config, 'EXECUTE_COMMANDS') and 
+                              config.EXECUTE_COMMANDS)
             
             # If we're on X11 with xdotool
             if self.is_x11:

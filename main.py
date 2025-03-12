@@ -38,6 +38,7 @@ class VoiceDictationApp:
         # Initialize components
         self.transcriber = Transcriber()
         self.text_injector = TextInjector()
+        self.text_injector.set_mode(mode)  # Pass the mode to the text injector
         self.formatter = TextFormatter()
         
         # Setup signal handlers for graceful shutdown
