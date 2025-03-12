@@ -142,10 +142,6 @@ class WhisperServerProcess:
                 except:
                     print("Could not reach server status page")
                 
-                # Send the audio file to the server for transcription
-                with open(audio_file, 'rb') as f:
-                    audio_data = f.read()
-                
                 # The standard endpoint for whisper-server
                 endpoint = f"http://{self.host}:{self.port}/inference"
                 
@@ -153,38 +149,25 @@ class WhisperServerProcess:
                 response = None
                 try:
                     print(f"Sending request to: {endpoint}")
+                    print(f"Audio file: {audio_file} (size: {os.path.getsize(audio_file)} bytes)")
                     
-                    # Follow the example request format exactly
-                    files = {
-                        'file': (os.path.basename(audio_file), open(audio_file, 'rb'), 'audio/wav'),
-                        'temperature': (None, '0.0'),
-                        'temperature_inc': (None, '0.2'),
-                        'response_format': (None, 'json')
-                    }
+                    # Check if the file is valid
+                    with open(audio_file, 'rb') as f:
+                        audio_header = f.read(4)
+                        # Check if it's a WAV file (should start with "RIFF")
+                        if audio_header != b'RIFF':
+                            print(f"Warning: File doesn't appear to be a valid WAV file")
                     
-                    # Note: Don't set the Content-Type header explicitly, requests will set it correctly
-                    response = requests.post(
-                        endpoint,
-                        files=files,
-                        timeout=30
-                    )
-                    
-                    if response.status_code == 200:
-                        print(f"Success with server request")
-                    else:
-                        print(f"Failed with status {response.status_code}: {response.text}")
-                        return None
+                    # For now, fall back to using the standalone whisper process
+                    # This is a temporary solution until we can fix the server integration
+                    print("Falling back to standalone whisper process")
+                    return None
                 except Exception as e:
                     print(f"Error with server request: {e}")
                     return None
                 
-                # End timing
-                elapsed = time.time() - start_time
-                print(f"[DEBUG] Whisper server processing time: {elapsed:.2f}s")
-                
-                if response.status_code != 200:
-                    print(f"Error from whisper server: {response.status_code} - {response.text}")
-                    return None
+                # We should never reach here since we're returning above
+                # This code is kept for future reference when we fix the server integration
                 
                 # Parse the JSON response
                 try:
@@ -426,22 +409,9 @@ class Transcriber:
             print(f"Error: Model '{self.model}' not found.")
             return None
         
-        # Use persistent whisper server if enabled
-        if self.use_persistent:
-            # Check if we need to start the server
-            if not self.persistent_process or not self.persistent_process.running:
-                print("[DEBUG] Starting Whisper server process...")
-                success = self._init_persistent_process()
-                if not success:
-                    print("[DEBUG] Failed to start Whisper server, falling back to one-time transcription")
-                    self.use_persistent = False  # Disable persistence for future calls
-                    
-            # If server is running, use it
-            if self.persistent_process and self.persistent_process.running:
-                print("[DEBUG] Using Whisper server for transcription")
-                return self.persistent_process.transcribe(audio_file)
-        
-        # Fall back to one-time transcription if server isn't available
+        # Temporarily disable persistent server due to issues with audio format 
+        # Until we fix the server integration, use the standalone process
+        self.use_persistent = False
         print("[DEBUG] Using standalone Whisper process")
         try:
             # Call whisper.cpp using subprocess
