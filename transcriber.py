@@ -83,17 +83,19 @@ class WhisperServerProcess:
             # Give it a moment to start
             time.sleep(3)
             
+            # Give the server more time to fully start
+            time.sleep(5)
+            
             # Check if it's running
             if self.process.poll() is None:
                 # Try to connect to the server to verify it's running
                 try:
-                    response = requests.get(f"http://{self.host}:{self.port}/health", timeout=2)
-                    if response.status_code == 200:
-                        self.running = True
-                        print(f"Whisper server started successfully on port {self.port}")
-                        return True
-                    else:
-                        print(f"Whisper server responded with status code {response.status_code}")
+                    # Try main page first - even if we get a 404, it means the server is running
+                    response = requests.get(f"http://{self.host}:{self.port}", timeout=2)
+                    print(f"Server responded with status code {response.status_code}")
+                    self.running = True
+                    print(f"Whisper server started successfully on port {self.port}")
+                    return True
                 except requests.RequestException as e:
                     print(f"Error connecting to whisper server: {e}")
                     # Continue and rely on process check
@@ -131,14 +133,48 @@ class WhisperServerProcess:
                 # Start timing
                 start_time = time.time()
                 
+                # Start by trying to check the server status
+                try:
+                    status_response = requests.get(f"http://{self.host}:{self.port}", timeout=2)
+                    print(f"Server status: {status_response.status_code}")
+                except:
+                    print("Could not reach server status page")
+                
                 # Send the audio file to the server for transcription
                 with open(audio_file, 'rb') as f:
-                    files = {'file': (os.path.basename(audio_file), f, 'audio/wav')}
-                    response = requests.post(
-                        self.url,
-                        files=files,
-                        timeout=10
-                    )
+                    audio_data = f.read()
+                
+                # Try different API endpoints (the server API may vary)
+                endpoints = [
+                    f"http://{self.host}:{self.port}/inference",
+                    f"http://{self.host}:{self.port}/api/v1/transcribe",
+                    f"http://{self.host}:{self.port}/transcribe"
+                ]
+                
+                response = None
+                for endpoint in endpoints:
+                    try:
+                        print(f"Trying endpoint: {endpoint}")
+                        files = {'file': (os.path.basename(audio_file), open(audio_file, 'rb'), 'audio/wav')}
+                        headers = {}
+                        response = requests.post(
+                            endpoint,
+                            files=files,
+                            headers=headers,
+                            timeout=20
+                        )
+                        if response.status_code == 200:
+                            print(f"Success with endpoint: {endpoint}")
+                            self.url = endpoint  # Remember successful endpoint
+                            break
+                        else:
+                            print(f"Failed with status {response.status_code}: {response.text}")
+                    except Exception as e:
+                        print(f"Error with endpoint {endpoint}: {e}")
+                
+                if not response or response.status_code != 200:
+                    print("All endpoints failed")
+                    return None
                 
                 # End timing
                 elapsed = time.time() - start_time
