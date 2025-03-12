@@ -171,6 +171,10 @@ class WhisperServerProcess:
             if self.ffmpeg_available:
                 command.append("--convert")
             
+            # Log the full command
+            cmd_str = " ".join([str(c) for c in command])
+            debug_log(f"Starting whisper-server with command: {cmd_str}")
+            
             # Start the server as a background process
             print(f"Starting whisper-server with model {os.path.basename(self.model_path)}...")
             self.process = subprocess.Popen(
@@ -530,6 +534,10 @@ class Transcriber:
                 "-sns",   # Suppress non-speech tokens
                 "-oj"     # Output JSON flag
             ]
+            
+            # Log the full command
+            cmd_str = " ".join([str(c) for c in command])
+            debug_log(f"Running whisper-cli with command: {cmd_str}")
             
             result = subprocess.run(
                 command,
