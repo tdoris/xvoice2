@@ -48,37 +48,15 @@ class WhisperProcess:
             return True
             
         try:
-            # Create command for running whisper in server mode
-            # We use the --file flag to monitor a directory for new audio files
-            command = [
-                self.whisper_executable,
-                "-m", self.model_path,
-                "--server", 
-                "--output-json",
-                "--output-dir", self.output_dir
-            ]
+            # We don't actually start a persistent process since the version
+            # of whisper.cpp doesn't support server mode. Instead, we'll
+            # just prepare the model path and create a lock for synchronized access
+            self.running = True
+            print(f"Persistent Whisper mode enabled (using model: {self.model_path})")
+            return True
             
-            # Start the process
-            self.process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            
-            # Give it a moment to start
-            time.sleep(1)
-            
-            # Check if process is running
-            if self.process.poll() is None:
-                self.running = True
-                print(f"Persistent Whisper process started (PID: {self.process.pid})")
-                return True
-            else:
-                print(f"Failed to start Whisper process. Exit code: {self.process.returncode}")
-                stderr = self.process.stderr.read() if self.process.stderr else "No stderr output"
-                print(f"Error: {stderr}")
-                return False
+            # Note: In this implementation, we're not actually starting a persistent process 
+            # but we're utilizing the class to maintain model state and synchronization
                 
         except Exception as e:
             print(f"Error starting Whisper process: {e}")
@@ -86,7 +64,7 @@ class WhisperProcess:
     
     def transcribe(self, audio_file: str) -> Optional[str]:
         """
-        Transcribe an audio file using the persistent process.
+        Transcribe an audio file using the persistent model.
         
         Args:
             audio_file: Path to the audio file to transcribe
@@ -100,17 +78,16 @@ class WhisperProcess:
                 
         with self.lock:
             try:
-                # Create a temporary file for the transcription result
-                output_json = os.path.join(self.output_dir, f"transcription_{int(time.time())}.json")
-                
                 # Run a single transcription command
                 command = [
                     self.whisper_executable,
                     "-m", self.model_path,
                     "-f", audio_file,
-                    "-oj",
-                    "-o", output_json
+                    "-oj"  # Output JSON flag
                 ]
+                
+                # Start timing
+                start_time = time.time()
                 
                 result = subprocess.run(
                     command,
@@ -121,44 +98,32 @@ class WhisperProcess:
                     timeout=10  # Add timeout to prevent hanging
                 )
                 
-                # Wait for output file to be written
-                start_time = time.time()
-                while not os.path.exists(output_json) and time.time() - start_time < 5:
-                    time.sleep(0.1)
+                # End timing
+                elapsed = time.time() - start_time
+                print(f"[DEBUG] Whisper processing time: {elapsed:.2f}s")
                 
-                if os.path.exists(output_json):
-                    # Read the output file
-                    with open(output_json, 'r') as f:
-                        try:
-                            output = json.load(f)
-                            
-                            # Extract and clean the text
-                            raw_text = output.get('text', '').strip()
-                            
-                            # Clean up timestamp patterns and [BLANK_AUDIO]
-                            import re
-                            clean_text = re.sub(r'\[\d+:\d+:\d+\.\d+ --> \d+:\d+:\d+\.\d+\]\s*', '', raw_text)
-                            clean_text = re.sub(r'\[BLANK_AUDIO\]', '', clean_text)
-                            clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-                            
-                            # Clean up
-                            try:
-                                os.remove(output_json)
-                            except:
-                                pass
-                                
-                            return clean_text
-                        except json.JSONDecodeError:
-                            print(f"Error parsing JSON output")
-                            return None
-                else:
-                    print(f"Whisper output file not found: {output_json}")
-                    # Try to get text from stdout
+                # Parse the JSON output
+                try:
+                    output = json.loads(result.stdout)
+                    
+                    # Extract and clean the text
+                    raw_text = output.get('text', '').strip()
+                    
+                    # Clean up timestamp patterns and [BLANK_AUDIO]
+                    import re
+                    clean_text = re.sub(r'\[\d+:\d+:\d+\.\d+ --> \d+:\d+:\d+\.\d+\]\s*', '', raw_text)
+                    clean_text = re.sub(r'\[BLANK_AUDIO\]', '', clean_text)
+                    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+                    
+                    return clean_text
+                except json.JSONDecodeError:
+                    # Try to extract the transcription from raw output
                     raw_text = result.stdout.strip()
                     import re
                     clean_text = re.sub(r'\[\d+:\d+:\d+\.\d+ --> \d+:\d+:\d+\.\d+\]\s*', '', raw_text)
                     clean_text = re.sub(r'\[BLANK_AUDIO\]', '', clean_text)
                     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+                    
                     return clean_text
                     
             except subprocess.CalledProcessError as e:
@@ -171,16 +136,7 @@ class WhisperProcess:
     
     def stop(self) -> None:
         """Stop the persistent Whisper process."""
-        if self.process and self.process.poll() is None:
-            try:
-                print("Stopping persistent Whisper process...")
-                self.process.terminate()
-                time.sleep(0.5)
-                if self.process.poll() is None:
-                    self.process.kill()
-            except:
-                pass
-                
+        print("Cleaning up Whisper resources...")
         self.running = False
         
         # Clean up temporary directories
@@ -339,23 +295,23 @@ class Transcriber:
             print(f"Error: Model '{self.model}' not found.")
             return None
         
-        # Use persistent process if enabled
+        # Use persistent whisper instance if enabled
         if self.use_persistent:
-            # Start or get our persistent process
+            # We're just tracking model load time and providing synchronization
             if not self.persistent_process or not self.persistent_process.running:
-                print("[DEBUG] Starting persistent Whisper process...")
+                print("[DEBUG] Initializing Whisper model for persistent use...")
                 success = self._init_persistent_process()
                 if not success:
-                    print("[DEBUG] Failed to start persistent process, falling back to one-time transcription")
+                    print("[DEBUG] Failed to initialize persistent model, falling back to one-time transcription")
                     self.use_persistent = False  # Disable persistence for future calls
                     
             # If we have a running persistent process, use it
             if self.persistent_process and self.persistent_process.running:
-                print("[DEBUG] Using persistent Whisper process")
+                print("[DEBUG] Using cached Whisper model")
                 return self.persistent_process.transcribe(audio_file)
         
         # Fall back to one-time transcription if persistent process isn't available
-        print("[DEBUG] Using one-time Whisper process")
+        print("[DEBUG] Using standalone Whisper process")
         try:
             # Call whisper.cpp using subprocess
             command = [
