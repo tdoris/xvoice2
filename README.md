@@ -41,7 +41,14 @@ sudo pacman -S portaudio python wtype
 ```bash
 git clone https://github.com/ggerganov/whisper.cpp.git
 cd whisper.cpp
+
+# Standard CPU-only build
 make
+
+# OR build with CUDA support for NVIDIA GPUs (recommended for faster processing)
+cmake -B build -DGGML_CUDA=1
+cmake --build build -j --config Release
+
 # Download a model (e.g., base)
 bash ./models/download-ggml-model.sh base
 # Add whisper.cpp to your PATH or adjust the path in config.py
@@ -65,7 +72,15 @@ brew install python
 ```bash
 git clone https://github.com/ggerganov/whisper.cpp.git
 cd whisper.cpp
+
+# Standard CPU-only build
 make
+
+# OR build with CUDA support if you have an NVIDIA GPU (recommended for faster processing)
+cmake -B build -DGGML_CUDA=1
+cmake --build build -j --config Release
+
+# Download a model (e.g., base)
 bash ./models/download-ggml-model.sh base
 # Copy to a location in your PATH or update config.py
 sudo cp build/bin/whisper-cli /opt/homebrew/bin/

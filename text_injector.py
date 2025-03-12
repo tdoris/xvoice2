@@ -8,8 +8,24 @@ import shlex
 import time
 import platform
 import os
+import datetime
 from typing import Optional
 import config
+
+# Define debug_log function locally to avoid circular import with main.py
+def debug_log(message: str, end: Optional[str] = None) -> None:
+    """
+    Print a debug message with a timestamp.
+    
+    Args:
+        message: The message to print
+        end: Optional ending character (default is newline)
+    """
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    if end is not None:
+        print(f"[{timestamp}] {message}", end=end, flush=True)
+    else:
+        print(f"[{timestamp}] {message}")
 
 class TextInjector:
     """Handles injecting text into the active application using the platform-appropriate method."""
@@ -79,7 +95,7 @@ class TextInjector:
             # Check if we should execute the command in terminal mode
             # This is a special case for command mode where we want to execute the command
             if self.current_mode == "command" and hasattr(config, 'EXECUTE_COMMANDS') and config.EXECUTE_COMMANDS:
-                print("[DEBUG] Command mode with execution enabled. Adding Return keystroke.")
+                debug_log("Command mode with execution enabled. Adding Return keystroke.")
                 applescript = f'tell application "System Events" to keystroke "{escaped_text}"\n' + \
                              'tell application "System Events" to keystroke return'
             
@@ -146,7 +162,7 @@ class TextInjector:
                 
                 # Add Enter keystroke if in command execution mode
                 if execute_command:
-                    print("[DEBUG] Command mode with execution enabled. Adding Return keystroke.")
+                    debug_log("Command mode with execution enabled. Adding Return keystroke.")
                     subprocess.run(f"{self.executable} key Return", shell=True, check=True)
                 
                 return True
@@ -163,7 +179,7 @@ class TextInjector:
                     
                     # Add Enter keystroke if in command execution mode
                     if execute_command:
-                        print("[DEBUG] Command mode with execution enabled. Adding Return keystroke.")
+                        debug_log("Command mode with execution enabled. Adding Return keystroke.")
                         subprocess.run(f"{self.executable} -k Return", shell=True, check=True)
                     
                     return True
@@ -174,7 +190,7 @@ class TextInjector:
                 
                 # Add Enter keystroke if in command execution mode
                 if execute_command:
-                    print("[DEBUG] Command mode with execution enabled. Adding Return keystroke.")
+                    debug_log("Command mode with execution enabled. Adding Return keystroke.")
                     subprocess.run(f"{self.executable} -k Return", shell=True, check=True)
                 
                 return True

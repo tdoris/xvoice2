@@ -95,6 +95,22 @@ If no audio input is detected:
    sudo apt-get install libopenblas-dev
    ```
 
+3. **Slow transcription performance:**
+   If transcription is taking 3+ seconds even with a powerful system:
+   - Make sure whisper.cpp is built with GPU support for significantly faster processing:
+   ```bash
+   # First, make sure you have CUDA installed:
+   # https://developer.nvidia.com/cuda-downloads
+
+   # Then build whisper.cpp with CUDA support:
+   cd whisper.cpp
+   cmake -B build -DGGML_CUDA=1
+   cmake --build build -j --config Release
+   ```
+   - You can verify GPU usage with `nvidia-smi` during transcription
+   - Properly built with CUDA, transcription should be much faster (often <1s for short phrases)
+   - The debug logs will show "Whisper server processing time" - values consistently over 3s usually indicate CPU-only processing
+
 ### Text Injection Issues
 
 1. **Session Type Detection:**

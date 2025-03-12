@@ -10,8 +10,23 @@ import os
 import tempfile
 import time
 import platform
+import datetime
 from typing import Generator, Tuple, Optional
 import config
+
+def debug_log(message: str, end: Optional[str] = None) -> None:
+    """
+    Print a debug message with a timestamp.
+    
+    Args:
+        message: The message to print
+        end: Optional ending character (default is newline)
+    """
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    if end is not None:
+        print(f"[{timestamp}] {message}", end=end, flush=True)
+    else:
+        print(f"[{timestamp}] {message}")
 
 class MicrophoneStream:
     """Handles microphone streaming and processing for voice dictation."""
@@ -36,6 +51,10 @@ class MicrophoneStream:
         self.stream = None
         self.temp_dir = tempfile.mkdtemp()
         self.device_index = None
+        
+        # For tracking speech and processing times
+        self.speech_end_time = None
+        self.transcription_start_time = None
     
     def __enter__(self):
         """Context manager entry point."""
@@ -210,6 +229,9 @@ class MicrophoneStream:
                     if consecutive_silence_frames >= required_silence_frames:
                         silence_after_speech = True
                         print("End of sentence detected.")
+                        # Store timestamp when speech ended
+                        self.speech_end_time = datetime.datetime.now()
+                        debug_log("Speech capture complete")
                         break
                 else:
                     consecutive_silence_frames = 0
@@ -254,6 +276,11 @@ class MicrophoneStream:
                 try:
                     file_path, speech_detected = self.capture_chunk()
                     if speech_detected:
+                        # Record when we start processing this file
+                        self.transcription_start_time = datetime.datetime.now()
+                        if self.speech_end_time:
+                            processing_delay = (self.transcription_start_time - self.speech_end_time).total_seconds()
+                            debug_log(f"Time between speech end and processing start: {processing_delay:.3f}s")
                         yield file_path
                     else:
                         time.sleep(0.1)  # Short pause when no speech detected

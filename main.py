@@ -13,13 +13,28 @@ import signal
 import argparse
 import platform
 import requests
-from typing import NoReturn
+import datetime
+from typing import NoReturn, Optional
 
 import config
 from mic_stream import MicrophoneStream
 from transcriber import Transcriber
 from text_injector import TextInjector
 from formatter import TextFormatter
+
+def debug_log(message: str, end: Optional[str] = None) -> None:
+    """
+    Print a debug message with a timestamp.
+    
+    Args:
+        message: The message to print
+        end: Optional ending character (default is newline)
+    """
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    if end is not None:
+        print(f"[{timestamp}] {message}", end=end, flush=True)
+    else:
+        print(f"[{timestamp}] {message}")
 
 class VoiceDictationApp:
     """Main voice dictation application class."""
@@ -121,8 +136,8 @@ class VoiceDictationApp:
         if not self.check_dependencies():
             return
             
-        print(f"Starting voice dictation in '{self.mode}' mode...")
-        print("Speak into your microphone. Press Ctrl+C to exit.")
+        debug_log(f"Starting voice dictation in '{self.mode}' mode...")
+        debug_log("Speak into your microphone. Press Ctrl+C to exit.")
         
         self.running = True
         
@@ -131,15 +146,28 @@ class VoiceDictationApp:
                 # Main application loop
                 for audio_file in stream.listen_continuous():
                     if not self.running:
-                        print("Stopping voice dictation loop...")
+                        debug_log("Stopping voice dictation loop...")
                         break
                         
                     # Skip if no audio file was generated
                     if not audio_file:
                         continue
-                        
+                    
+                    # Record the start time of audio processing
+                    process_start_time = datetime.datetime.now()
+                    
                     # Process the audio file
                     self._process_audio(audio_file)
+                    
+                    # Calculate and log the total processing time
+                    process_end_time = datetime.datetime.now()
+                    total_processing_time = (process_end_time - process_start_time).total_seconds()
+                    debug_log(f"Total audio processing time: {total_processing_time:.3f}s")
+                    
+                    # Calculate time from speech end to text injection if available
+                    if hasattr(stream, 'speech_end_time') and stream.speech_end_time:
+                        speech_to_text_time = (process_end_time - stream.speech_end_time).total_seconds()
+                        debug_log(f"Time from speech end to text injection: {speech_to_text_time:.3f}s")
                     
                     # Remove the temporary audio file
                     try:
@@ -148,15 +176,15 @@ class VoiceDictationApp:
                         pass
         except KeyboardInterrupt:
             # Handle Ctrl+C gracefully
-            print("\nShutting down voice dictation...")
+            debug_log("\nShutting down voice dictation...")
             self.running = False
         except Exception as e:
-            print(f"Unexpected error in main loop: {e}")
+            debug_log(f"Unexpected error in main loop: {e}")
         finally:
             # Clean up resources
-            print("Cleaning up resources...")
+            debug_log("Cleaning up resources...")
             self.transcriber.cleanup()
-            print("Voice dictation application closed.")
+            debug_log("Voice dictation application closed.")
     
     def _process_audio(self, audio_file: str) -> None:
         """
@@ -166,35 +194,35 @@ class VoiceDictationApp:
             audio_file: Path to the audio file to process
         """
         # Step 1: Transcribe the audio
-        print("Transcribing...", end="", flush=True)
+        debug_log("Transcribing...", end="")
         transcription = self.transcriber.transcribe(audio_file)
         
         if not transcription:
             print(" No speech detected")
-            print("Check if whisper.cpp is working correctly. Try running:")
-            print("python3 test_transcribe.py")
+            debug_log("Check if whisper.cpp is working correctly. Try running:")
+            debug_log("python3 test_transcribe.py")
             return
             
         print(f" Done")
-        print(f"[DEBUG] Raw transcription from Whisper: '{transcription}'")
+        debug_log(f"Raw transcription from Whisper: '{transcription}'")
         
         # Step 2: Format the text if either LLM option is enabled
         if config.USE_LLM or config.USE_LOCAL_LLM:
             llm_type = "Ollama" if config.USE_LOCAL_LLM else "OpenAI"
-            print(f"[DEBUG] LLM formatting IS enabled ({llm_type})")
-            print(f"Formatting with {llm_type}...", end="", flush=True)
+            debug_log(f"LLM formatting IS enabled ({llm_type})")
+            debug_log(f"Formatting with {llm_type}...", end="")
             formatted_text = self.formatter.format_text(transcription, self.mode)
             print(" Done")
-            print(f"[DEBUG] Formatted text from {llm_type}: '{formatted_text}'")
+            debug_log(f"Formatted text from {llm_type}: '{formatted_text}'")
         else:
-            print(f"[DEBUG] LLM formatting is NOT enabled")
+            debug_log(f"LLM formatting is NOT enabled")
             formatted_text = transcription
             
         # Step 3: Inject the text into the active window
-        print("Injecting text...", end="", flush=True)
+        debug_log("Injecting text...", end="")
         success = self.text_injector.inject_text(formatted_text)
         print(" Done" if success else " Failed")
-        print(f"[DEBUG] Final text injected: '{formatted_text}'")
+        debug_log(f"Final text injected: '{formatted_text}'")
 
 
 def main():

@@ -7,8 +7,24 @@ Supports both cloud APIs (OpenAI) and local models via Ollama.
 import requests
 import json
 import platform
+import datetime
 from typing import Optional, Dict, Any
 import config
+
+# Define debug_log function locally to avoid circular import with main.py
+def debug_log(message: str, end: Optional[str] = None) -> None:
+    """
+    Print a debug message with a timestamp.
+    
+    Args:
+        message: The message to print
+        end: Optional ending character (default is newline)
+    """
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    if end is not None:
+        print(f"[{timestamp}] {message}", end=end, flush=True)
+    else:
+        print(f"[{timestamp}] {message}")
 
 class TextFormatter:
     """Handles formatting transcribed text using LLM APIs."""
@@ -38,7 +54,7 @@ class TextFormatter:
         """
         # Return the original text if LLM formatting is disabled or text is empty
         if not text.strip():
-            print("[DEBUG] Text is empty, skipping formatting")
+            debug_log("Text is empty, skipping formatting")
             return text
             
         # Check which LLM option is enabled (if any)
@@ -46,33 +62,33 @@ class TextFormatter:
         use_ollama = self.use_local_llm
         
         if not use_openai and not use_ollama:
-            print("[DEBUG] No LLM service is enabled for formatting")
+            debug_log("No LLM service is enabled for formatting")
             return text
             
         try:
             # Adjust prompt based on mode
             mode_prompt = self._get_mode_prompt(mode)
             full_prompt = f"{mode_prompt} {text}"
-            print(f"[DEBUG] Sending prompt to LLM: '{full_prompt}'")
+            debug_log(f"Sending prompt to LLM: '{full_prompt}'")
             
             # Choose LLM provider based on configuration
             if use_ollama:
-                print(f"[DEBUG] Using Ollama with model: {self.ollama_model}")
+                debug_log(f"Using Ollama with model: {self.ollama_model}")
                 response = self._call_ollama_api(full_prompt)
             elif use_openai:
-                print(f"[DEBUG] Using OpenAI with model: {self.model}")
+                debug_log(f"Using OpenAI with model: {self.model}")
                 response = self._call_openai_api(full_prompt)
             else:
                 return text
             
             if response:
-                print(f"[DEBUG] Received formatted response from LLM")
+                debug_log("Received formatted response from LLM")
                 return response
             
-            print("[DEBUG] LLM returned empty response, using original text")
+            debug_log("LLM returned empty response, using original text")
             return text
         except Exception as e:
-            print(f"[DEBUG] Error formatting text: {e}")
+            debug_log(f"Error formatting text: {e}")
             return text
     
     def _get_mode_prompt(self, mode: str) -> str:
@@ -143,7 +159,7 @@ Instruction: """
         }
         
         try:
-            print(f"[DEBUG] Sending request to OpenAI API")
+            debug_log("Sending request to OpenAI API")
             response = requests.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers=headers,
@@ -151,15 +167,15 @@ Instruction: """
                 timeout=5  # Short timeout to ensure low latency
             )
             
-            print(f"[DEBUG] OpenAI API status code: {response.status_code}")
+            debug_log(f"OpenAI API status code: {response.status_code}")
             response.raise_for_status()
             result = response.json()
             
             formatted_text = result["choices"][0]["message"]["content"].strip()
-            print(f"[DEBUG] OpenAI API response: '{formatted_text}'")
+            debug_log(f"OpenAI API response: '{formatted_text}'")
             return formatted_text
         except requests.RequestException as e:
-            print(f"[DEBUG] OpenAI API request error: {e}")
+            debug_log(f"OpenAI API request error: {e}")
             return None
             
     def _call_ollama_api(self, prompt: str) -> Optional[str]:
@@ -191,7 +207,7 @@ Instruction: """
         }
         
         try:
-            print(f"[DEBUG] Sending request to Ollama API")
+            debug_log("Sending request to Ollama API")
             response = requests.post(
                 self.ollama_url,
                 headers=headers,
@@ -199,14 +215,14 @@ Instruction: """
                 timeout=5  # Short timeout to ensure low latency
             )
             
-            print(f"[DEBUG] Ollama API status code: {response.status_code}")
+            debug_log(f"Ollama API status code: {response.status_code}")
             response.raise_for_status()
             result = response.json()
             
             # Ollama response format is different from OpenAI
             formatted_text = result.get("response", "").strip()
-            print(f"[DEBUG] Ollama API response: '{formatted_text}'")
+            debug_log(f"Ollama API response: '{formatted_text}'")
             return formatted_text
         except requests.RequestException as e:
-            print(f"[DEBUG] Ollama API request error: {e}")
+            debug_log(f"Ollama API request error: {e}")
             return None

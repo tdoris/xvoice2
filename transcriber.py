@@ -14,8 +14,23 @@ import signal
 import atexit
 import wave
 import shutil
+import datetime
 from typing import Optional, Dict, Any, Tuple
 import config
+
+def debug_log(message: str, end: Optional[str] = None) -> None:
+    """
+    Print a debug message with a timestamp.
+    
+    Args:
+        message: The message to print
+        end: Optional ending character (default is newline)
+    """
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    if end is not None:
+        print(f"[{timestamp}] {message}", end=end, flush=True)
+    else:
+        print(f"[{timestamp}] {message}")
 
 class WhisperServerProcess:
     """Manages a persistent Whisper.cpp server process for faster transcription."""
@@ -68,7 +83,7 @@ class WhisperServerProcess:
     
     def _convert_audio_to_16k_wav(self, input_file: str) -> Optional[str]:
         """Convert audio to 16kHz mono WAV format for whisper-server."""
-        print(f"[DEBUG] Converting audio to 16kHz mono WAV...")
+        debug_log("Converting audio to 16kHz mono WAV...")
         
         # Create output file path
         output_file = os.path.join(self.temp_dir, f"whisper_conv_{os.path.basename(input_file)}")
@@ -81,13 +96,13 @@ class WhisperServerProcess:
                 
                 # If file is already 16kHz mono, just make a copy
                 if channels == 1 and framerate == 16000:
-                    print(f"[DEBUG] File already in 16kHz mono format")
+                    debug_log("File already in 16kHz mono format")
                     shutil.copy(input_file, output_file)
                     return output_file
                 
-                print(f"[DEBUG] WAV file needs conversion: {channels} channels, {framerate} Hz")
+                debug_log(f"WAV file needs conversion: {channels} channels, {framerate} Hz")
         except Exception as e:
-            print(f"[DEBUG] Not a standard WAV file or error reading: {e}")
+            debug_log(f"Not a standard WAV file or error reading: {e}")
         
         # Try sox first (usually faster)
         if self.sox_available:
@@ -100,10 +115,10 @@ class WhisperServerProcess:
                     output_file
                 ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 
-                print(f"[DEBUG] Converted with sox")
+                debug_log("Converted with sox")
                 return output_file
             except Exception as e:
-                print(f"[DEBUG] Sox conversion failed: {e}")
+                debug_log(f"Sox conversion failed: {e}")
         
         # Fall back to ffmpeg
         if self.ffmpeg_available:
@@ -118,12 +133,12 @@ class WhisperServerProcess:
                     output_file
                 ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 
-                print(f"[DEBUG] Converted with ffmpeg")
+                debug_log("Converted with ffmpeg")
                 return output_file
             except Exception as e:
-                print(f"[DEBUG] ffmpeg conversion failed: {e}")
+                debug_log(f"ffmpeg conversion failed: {e}")
         
-        print(f"[DEBUG] Could not convert audio file")
+        debug_log("Could not convert audio file")
         return None
     
     def start(self) -> bool:
@@ -148,7 +163,8 @@ class WhisperServerProcess:
                 "--model", self.model_path,
                 "--host", self.host,
                 "--port", str(self.port),
-                "--threads", "4"
+                "--threads", "4",
+                "-sns"  # Suppress non-speech tokens like [LAUGHS], [MUSIC], etc.
             ]
             
             # Add convert flag if ffmpeg is available
@@ -238,7 +254,8 @@ class WhisperServerProcess:
                         'file': (os.path.basename(actual_file), f, 'audio/wav'),
                         'temperature': (None, '0.0'),
                         'temperature_inc': (None, '0.2'),
-                        'response_format': (None, 'json')
+                        'response_format': (None, 'json'),
+                        'suppress_non_speech_tokens': (None, 'true')  # Suppress [LAUGHS], [MUSIC], etc.
                     }
                     
                     response = requests.post(
@@ -256,11 +273,11 @@ class WhisperServerProcess:
                 
                 # End timing
                 elapsed = time.time() - start_time
-                print(f"[DEBUG] Whisper server processing time: {elapsed:.2f}s")
+                debug_log(f"Whisper server processing time: {elapsed:.2f}s")
                 
                 # Check if the request was successful
                 if response.status_code != 200:
-                    print(f"Error from whisper server: {response.status_code} - {response.text}")
+                    debug_log(f"Error from whisper server: {response.status_code} - {response.text}")
                     return None
                 
                 # Parse the response
@@ -272,10 +289,10 @@ class WhisperServerProcess:
                         raw_text = result.get('text', '').strip()
                     elif 'error' in result:
                         error_msg = result.get('error', '')
-                        print(f"Server returned error: {error_msg}")
+                        debug_log(f"Server returned error: {error_msg}")
                         return None
                     else:
-                        print(f"Unknown response format: {response.text}")
+                        debug_log(f"Unknown response format: {response.text}")
                         return None
                     
                     # Clean up the text
@@ -447,15 +464,15 @@ class Transcriber:
             Transcribed text or None if transcription failed
         """
         if not os.path.exists(audio_file):
-            print(f"Audio file not found: {audio_file}")
+            debug_log(f"Audio file not found: {audio_file}")
             return None
         
         # Decide which transcription method to use
         if self.use_api and self.api_key:
-            print("[DEBUG] Using OpenAI Whisper API for transcription")
+            debug_log("Using OpenAI Whisper API for transcription")
             return self._transcribe_with_api(audio_file)
         else:
-            print("[DEBUG] Using local whisper.cpp for transcription")
+            debug_log("Using local whisper.cpp for transcription")
             return self._transcribe_with_local(audio_file)
     
     def _transcribe_with_local(self, audio_file: str) -> Optional[str]:
@@ -471,22 +488,22 @@ class Transcriber:
         # Find model path
         model_path = self._find_model_path()
         if not model_path:
-            print(f"Error: Model '{self.model}' not found.")
+            debug_log(f"Error: Model '{self.model}' not found.")
             return None
         
         # Use persistent whisper server if enabled
         if self.use_persistent:
             # Check if we need to start the server
             if not self.persistent_process or not self.persistent_process.running:
-                print("[DEBUG] Starting Whisper server process...")
+                debug_log("Starting Whisper server process...")
                 success = self._init_persistent_process()
                 if not success:
-                    print("[DEBUG] Failed to start Whisper server, falling back to one-time transcription")
+                    debug_log("Failed to start Whisper server, falling back to one-time transcription")
                     self.use_persistent = False  # Disable persistence for future calls
                     
             # If server is running, use it
             if self.persistent_process and self.persistent_process.running:
-                print("[DEBUG] Using Whisper server for transcription")
+                debug_log("Using Whisper server for transcription")
                 
                 # Convert audio to 16kHz mono WAV for compatibility with whisper-server
                 converted_file = self._convert_audio_for_server(audio_file)
@@ -500,17 +517,18 @@ class Transcriber:
                             pass
                     return result
                 else:
-                    print("[DEBUG] Audio conversion failed, falling back to standalone process")
+                    debug_log("Audio conversion failed, falling back to standalone process")
         
         # Fall back to one-time transcription if server isn't available
-        print("[DEBUG] Using standalone Whisper process")
+        debug_log("Using standalone Whisper process")
         try:
             # Call whisper.cpp using subprocess
             command = [
                 self.whisper_executable,
                 "-m", model_path,
                 "-f", audio_file,
-                "-oj"  # Output JSON flag
+                "-sns",   # Suppress non-speech tokens
+                "-oj"     # Output JSON flag
             ]
             
             result = subprocess.run(
