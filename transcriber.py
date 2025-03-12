@@ -29,7 +29,7 @@ class WhisperServerProcess:
         # Set up paths
         self.whisper_root = whisper_root
         self.model_path = model_path
-        self.server_executable = os.path.join(os.path.dirname(whisper_root), "build/bin/whisper-server")
+        self.server_executable = os.path.join(whisper_root, "build/bin/whisper-server")
         
         # Server settings
         self.host = "127.0.0.1"
@@ -339,8 +339,9 @@ class Transcriber:
             print(f"Error: Model '{self.model}' not found.")
             return False
             
-        # Get whisper root directory from executable path
-        whisper_root = os.path.dirname(os.path.dirname(os.path.dirname(self.whisper_executable)))
+        # Find whisper-server executable directory
+        whisper_bin_dir = os.path.dirname(self.whisper_executable)
+        whisper_root = os.path.dirname(whisper_bin_dir)  # Go up one level from bin directory
         
         # Create a new persistent server process
         self.persistent_process = WhisperServerProcess(whisper_root, model_path)
