@@ -36,19 +36,23 @@ class TestMicrophoneStream:
         """Test silence detection with silent audio."""
         with patch('pyaudio.PyAudio'):
             stream = MicrophoneStream()
-            with patch.object(config, 'SILENCE_THRESHOLD', 0.1):
-                result = stream.is_silent(mock_audio_data_silent)
-                
-                assert result == True
+            # Set a fixed adaptive threshold for testing
+            stream.adaptive_threshold = 500
+            stream.auto_calibration_complete = True
+            
+            result = stream.is_silent(mock_audio_data_silent)
+            assert result == True
     
     def test_is_silent_with_speech_data(self, mock_audio_data_speech):
         """Test silence detection with speech audio."""
         with patch('pyaudio.PyAudio'):
             stream = MicrophoneStream()
-            with patch.object(config, 'SILENCE_THRESHOLD', 0.1):
-                result = stream.is_silent(mock_audio_data_speech)
-                
-                assert result == False
+            # Set a fixed adaptive threshold for testing
+            stream.adaptive_threshold = 500
+            stream.auto_calibration_complete = True
+            
+            result = stream.is_silent(mock_audio_data_speech)
+            assert result == False
     
     @patch('tempfile.mkdtemp')
     def test_context_manager(self, mock_mkdtemp):
@@ -83,10 +87,14 @@ class TestMicrophoneStream:
             mock_pyaudio.return_value = mock_instance
             mock_instance.open.return_value = mock_stream
             
-            # Mock numpy array conversion to detect speech
-            with patch('numpy.frombuffer', return_value=mock_audio_data_speech):
-                with patch.object(config, 'SILENCE_THRESHOLD', 0.1):
+            # Disable calibration for testing
+            with patch.object(config, 'CALIBRATION_ENABLED', False):
+                # Mock numpy array conversion to detect speech
+                with patch('numpy.frombuffer', return_value=mock_audio_data_speech):
                     stream = MicrophoneStream()
+                    # Set a fixed adaptive threshold for testing
+                    stream.adaptive_threshold = 500
+                    stream.auto_calibration_complete = True
                     stream.stream = mock_stream  # Set the mocked stream
                     
                     filepath, speech_detected = stream.capture_chunk()

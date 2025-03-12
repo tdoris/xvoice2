@@ -52,8 +52,10 @@ FORMAT = "int16"  # Audio format
 # Audio processing settings
 CHUNK_DURATION = 2  # Duration of audio chunks in seconds
 MAX_SENTENCE_DURATION = 20  # Maximum duration in seconds for a single sentence
-SILENCE_THRESHOLD = 0.03  # Threshold to detect silence
+SILENCE_THRESHOLD = 0.03  # Threshold to detect silence (legacy, used as fallback)
 SILENCE_DURATION = 1.0  # Duration of silence to trigger end of speech in seconds
+THRESHOLD_ADJUSTMENT_FACTOR = 1.0  # Multiplier for auto-calibrated threshold (>1 = less sensitive, <1 = more sensitive)
+CALIBRATION_ENABLED = True  # Whether to use auto-calibration for silence detection
 
 # Text injection settings
 TYPING_DELAY = 0  # Delay between characters in milliseconds (0 for no delay)

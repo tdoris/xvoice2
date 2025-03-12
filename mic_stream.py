@@ -55,6 +55,12 @@ class MicrophoneStream:
         # For tracking speech and processing times
         self.speech_end_time = None
         self.transcription_start_time = None
+        
+        # Auto-calibration for silence detection
+        self.calibration_samples = []
+        self.adaptive_threshold = None
+        self.auto_calibration_complete = False
+        self.calibration_factor = 2.0  # Multiplier above ambient noise floor
     
     def __enter__(self):
         """Context manager entry point."""
@@ -158,11 +164,77 @@ class MicrophoneStream:
         Returns:
             True if the audio is below the silence threshold
         """
-        # Hardcoded threshold that matches the scale of int16 audio
-        actual_threshold = 1000
-        
         max_amplitude = np.max(np.abs(data_array))
-        return max_amplitude < actual_threshold
+        
+        # Use the dynamically calibrated threshold if available, otherwise fallback to hardcoded value
+        threshold = getattr(self, 'adaptive_threshold', 1000)
+        return max_amplitude < threshold
+    
+    def calibrate_silence_threshold(self):
+        """
+        Calibrate silence threshold based on ambient noise levels.
+        Collects audio samples to determine the background noise floor,
+        then sets the threshold to a multiple of that level.
+        """
+        if not self.stream:
+            self.start_stream()
+            
+        debug_log("Calibrating microphone silence threshold...")
+        
+        # Collect ambient noise samples (2 seconds)
+        self.calibration_samples = []
+        calibration_frames = 60  # ~2 seconds of audio at typical settings
+        
+        # Ask user to be quiet during calibration
+        print("Calibrating microphone... please remain quiet for 2 seconds.")
+        
+        for i in range(calibration_frames):
+            try:
+                data = self.stream.read(self.chunk_size, exception_on_overflow=False)
+                data_array = np.frombuffer(data, dtype=np.int16)
+                max_amplitude = np.max(np.abs(data_array))
+                self.calibration_samples.append(max_amplitude)
+                
+                # Print a simple progress indicator
+                if i % 15 == 0:  # Show progress roughly every 0.5 seconds
+                    progress = int((i / calibration_frames) * 100)
+                    debug_log(f"Calibration progress: {progress}%")
+            except Exception as e:
+                debug_log(f"Error during calibration: {e}")
+                break
+                
+        if not self.calibration_samples:
+            debug_log("Calibration failed - using default threshold")
+            self.adaptive_threshold = 1000  # Fallback to default
+            return
+        
+        # Calculate statistics on the ambient noise
+        min_level = np.min(self.calibration_samples)
+        mean_level = np.mean(self.calibration_samples)
+        max_level = np.max(self.calibration_samples)
+        p90_level = np.percentile(self.calibration_samples, 90)
+        
+        # Use a smart approach based on the noise profile
+        # - If the environment is very quiet, use a reasonable minimum threshold
+        # - If noise fluctuates a lot, use a more conservative approach
+        noise_range = max_level - min_level
+        if noise_range > mean_level * 2:
+            # High variance environment - use 95th percentile + buffer
+            self.adaptive_threshold = np.percentile(self.calibration_samples, 95) * 1.5
+        else:
+            # Standard environment - use 90th percentile * factor
+            self.adaptive_threshold = max(p90_level * self.calibration_factor, 500)
+        
+        # Apply config factor if specified
+        if hasattr(config, 'THRESHOLD_ADJUSTMENT_FACTOR'):
+            self.adaptive_threshold *= config.THRESHOLD_ADJUSTMENT_FACTOR
+        
+        debug_log(f"Calibration complete - noise profile: min={min_level:.1f}, mean={mean_level:.1f}, max={max_level:.1f}")
+        debug_log(f"Silence threshold set to: {self.adaptive_threshold:.1f}")
+        
+        print(f"Calibration complete! (ambient noise level: {mean_level:.0f})")
+        self.auto_calibration_complete = True
+        self.last_calibration_time = time.time()
     
     def capture_chunk(self) -> Tuple[str, bool]:
         """
@@ -175,6 +247,10 @@ class MicrophoneStream:
         """
         if not self.stream:
             self.start_stream()
+            
+        # Auto-calibrate on first use if enabled and not done already
+        if not self.auto_calibration_complete and getattr(config, 'CALIBRATION_ENABLED', True):
+            self.calibrate_silence_threshold()
             
         frames = []
         silent_frames = 0
@@ -261,6 +337,26 @@ class MicrophoneStream:
             
         return temp_file, True
     
+    def recalibrate_if_needed(self, false_trigger_count: int = 0) -> None:
+        """
+        Recalibrate the silence threshold if needed based on false triggers.
+        
+        Args:
+            false_trigger_count: Number of recent false triggers
+        """
+        # Increase threshold if we're getting too many false positives
+        if false_trigger_count > 0:
+            old_threshold = self.adaptive_threshold
+            # Increase by 20% for each false trigger (up to doubling)
+            self.adaptive_threshold = min(old_threshold * (1 + 0.2 * false_trigger_count), old_threshold * 2)
+            debug_log(f"Adjusted threshold after false trigger: {old_threshold:.1f} → {self.adaptive_threshold:.1f}")
+            
+        # Periodically recalibrate after long idle periods (randomly, ~10% chance when idle)
+        if not hasattr(self, 'last_calibration_time') or time.time() - self.last_calibration_time > 60:
+            if np.random.random() < 0.1:  # 10% chance to recalibrate when idle
+                self.calibrate_silence_threshold()
+                self.last_calibration_time = time.time()
+    
     def listen_continuous(self) -> Generator[str, None, None]:
         """
         Generator that continuously captures audio chunks when speech is detected.
@@ -272,6 +368,10 @@ class MicrophoneStream:
             self.start_stream()
             print("Audio stream started successfully. Listening...")
             
+            # Initialize tracking for false positives
+            false_trigger_count = 0
+            self.last_calibration_time = time.time()
+            
             while True:
                 try:
                     file_path, speech_detected = self.capture_chunk()
@@ -281,8 +381,39 @@ class MicrophoneStream:
                         if self.speech_end_time:
                             processing_delay = (self.transcription_start_time - self.speech_end_time).total_seconds()
                             debug_log(f"Time between speech end and processing start: {processing_delay:.3f}s")
+                        
+                        # Check for false positives by examining audio characteristics 
+                        try:
+                            with wave.open(file_path, 'rb') as wf:
+                                # Calculate duration
+                                frames = wf.getnframes()
+                                rate = wf.getframerate()
+                                duration = frames / float(rate)
+                                
+                                # Read audio data
+                                audio_data = wf.readframes(frames)
+                                audio_array = np.frombuffer(audio_data, dtype=np.int16)
+                                
+                                # Calculate energy/amplitude metrics
+                                avg_amplitude = np.mean(np.abs(audio_array))
+                                max_amplitude = np.max(np.abs(audio_array))
+                                
+                                # False positive detection
+                                if duration < 0.3 or avg_amplitude < (self.adaptive_threshold * 0.7):
+                                    debug_log(f"Possible false trigger: duration={duration:.2f}s, avg_amp={avg_amplitude:.1f}, max_amp={max_amplitude:.1f}")
+                                    false_trigger_count += 1
+                                    self.recalibrate_if_needed(false_trigger_count)
+                                    os.remove(file_path)  # Clean up the audio file
+                                    continue
+                        except Exception as e:
+                            debug_log(f"Error checking audio: {e}")
+                    
+                        # Reset false trigger count on successful capture
+                        false_trigger_count = 0
                         yield file_path
                     else:
+                        # Occasionally recalibrate during idle periods
+                        self.recalibrate_if_needed()
                         time.sleep(0.1)  # Short pause when no speech detected
                 except KeyboardInterrupt:
                     print("\nGracefully shutting down...")
