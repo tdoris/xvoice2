@@ -16,8 +16,8 @@ class TestWhisperAPI:
     
     def test_init_with_api_enabled(self):
         """Test initialization with Whisper API enabled."""
-        with patch('config.USE_WHISPER_API', True):
-            with patch('config.WHISPER_API_KEY', 'test_key'):
+        with patch('xvoice2.config.USE_WHISPER_API', True):
+            with patch('xvoice2.config.WHISPER_API_KEY', 'test_key'):
                 transcriber = Transcriber()
                 
                 assert transcriber.use_api is True
@@ -26,8 +26,8 @@ class TestWhisperAPI:
     
     def test_transcribe_routing_to_api(self):
         """Test that transcribe routes to API method when enabled."""
-        with patch('config.USE_WHISPER_API', True):
-            with patch('config.WHISPER_API_KEY', 'test_key'):
+        with patch('xvoice2.config.USE_WHISPER_API', True):
+            with patch('xvoice2.config.WHISPER_API_KEY', 'test_key'):
                 transcriber = Transcriber()
                 
                 # Create a temporary audio file
@@ -53,7 +53,7 @@ class TestWhisperAPI:
     
     def test_transcribe_routing_to_local(self):
         """Test that transcribe routes to local method when API is disabled."""
-        with patch('config.USE_WHISPER_API', False):
+        with patch('xvoice2.config.USE_WHISPER_API', False):
             transcriber = Transcriber()
             
             # Create a temporary audio file
@@ -93,8 +93,8 @@ class TestWhisperAPI:
         
         try:
             # Configure transcriber to use API
-            with patch('config.USE_WHISPER_API', True):
-                with patch('config.WHISPER_API_KEY', 'test_key'):
+            with patch('xvoice2.config.USE_WHISPER_API', True):
+                with patch('xvoice2.config.WHISPER_API_KEY', 'test_key'):
                     transcriber = Transcriber()
                     result = transcriber._transcribe_with_api(temp_path)
             
@@ -127,8 +127,8 @@ class TestWhisperAPI:
         
         try:
             # Configure transcriber to use API
-            with patch('config.USE_WHISPER_API', True):
-                with patch('config.WHISPER_API_KEY', 'invalid_key'):
+            with patch('xvoice2.config.USE_WHISPER_API', True):
+                with patch('xvoice2.config.WHISPER_API_KEY', 'invalid_key'):
                     transcriber = Transcriber()
                     result = transcriber._transcribe_with_api(temp_path)
             
@@ -151,8 +151,8 @@ class TestWhisperAPI:
         
         try:
             # Configure transcriber to use API
-            with patch('config.USE_WHISPER_API', True):
-                with patch('config.WHISPER_API_KEY', 'test_key'):
+            with patch('xvoice2.config.USE_WHISPER_API', True):
+                with patch('xvoice2.config.WHISPER_API_KEY', 'test_key'):
                     transcriber = Transcriber()
                     result = transcriber._transcribe_with_api(temp_path)
             
@@ -177,9 +177,9 @@ class TestWhisperAPI:
         mock_get.return_value = mock_response
         
         # Configure transcriber to use API
-        with patch('config.USE_WHISPER_API', True):
-            with patch('config.WHISPER_API_KEY', 'test_key'):
-                with patch('config.WHISPER_API_MODEL', 'whisper-1'):
+        with patch('xvoice2.config.USE_WHISPER_API', True):
+            with patch('xvoice2.config.WHISPER_API_KEY', 'test_key'):
+                with patch('xvoice2.config.WHISPER_API_MODEL', 'whisper-1'):
                     transcriber = Transcriber()
                     result = transcriber.is_api_available()
         
@@ -196,8 +196,8 @@ class TestWhisperAPI:
         mock_get.return_value = mock_response
         
         # Configure transcriber to use API
-        with patch('config.USE_WHISPER_API', True):
-            with patch('config.WHISPER_API_KEY', 'invalid_key'):
+        with patch('xvoice2.config.USE_WHISPER_API', True):
+            with patch('xvoice2.config.WHISPER_API_KEY', 'invalid_key'):
                 transcriber = Transcriber()
                 result = transcriber.is_api_available()
         
@@ -207,8 +207,8 @@ class TestWhisperAPI:
     def test_is_api_available_no_key(self):
         """Test API availability check when no API key is provided."""
         # Configure transcriber to use API but with no key
-        with patch('config.USE_WHISPER_API', True):
-            with patch('config.WHISPER_API_KEY', ''):
+        with patch('xvoice2.config.USE_WHISPER_API', True):
+            with patch('xvoice2.config.WHISPER_API_KEY', ''):
                 transcriber = Transcriber()
                 result = transcriber.is_api_available()
         
@@ -217,8 +217,8 @@ class TestWhisperAPI:
     
     def test_is_available_with_api(self):
         """Test is_available when API is available."""
-        with patch('config.USE_WHISPER_API', True):
-            with patch('config.WHISPER_API_KEY', 'test_key'):
+        with patch('xvoice2.config.USE_WHISPER_API', True):
+            with patch('xvoice2.config.WHISPER_API_KEY', 'test_key'):
                 transcriber = Transcriber()
                 
                 # Mock is_api_available to return True
@@ -234,8 +234,8 @@ class TestWhisperAPI:
     
     def test_is_available_fallback_to_local(self):
         """Test is_available falls back to checking local when API is unavailable."""
-        with patch('config.USE_WHISPER_API', True):
-            with patch('config.WHISPER_API_KEY', 'test_key'):
+        with patch('xvoice2.config.USE_WHISPER_API', True):
+            with patch('xvoice2.config.WHISPER_API_KEY', 'test_key'):
                 transcriber = Transcriber()
                 
                 # Mock is_api_available to return False

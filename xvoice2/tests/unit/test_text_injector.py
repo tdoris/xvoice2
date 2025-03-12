@@ -63,10 +63,10 @@ class TestTextInjector:
     
     def test_inject_text_macos_with_delay(self, mock_subprocess_run, mock_platform_macos):
         """Test text injection on macOS with typing delay."""
-        with patch('config.TYPING_DELAY', 10):
+        with patch('xvoice2.config.TYPING_DELAY', 10):
             with patch('time.sleep') as mock_sleep:
                 # Patch EXECUTE_COMMANDS to False to avoid additional Return keystroke
-                with patch('config.EXECUTE_COMMANDS', False):
+                with patch('xvoice2.config.EXECUTE_COMMANDS', False):
                     injector = TextInjector()
                     result = injector.inject_text("ab")
                     
@@ -91,7 +91,7 @@ class TestTextInjector:
         mock_subprocess_run.return_value = MagicMock(returncode=0)
         
         # Patch EXECUTE_COMMANDS to False to avoid additional Return keystroke
-        with patch('config.EXECUTE_COMMANDS', False):
+        with patch('xvoice2.config.EXECUTE_COMMANDS', False):
             injector = TextInjector()
             result = injector.inject_text("test text")
             
@@ -100,10 +100,10 @@ class TestTextInjector:
     
     def test_inject_text_linux_with_delay(self, mock_subprocess_run, mock_platform_linux):
         """Test text injection on Linux with typing delay."""
-        with patch('config.TYPING_DELAY', 10):
+        with patch('xvoice2.config.TYPING_DELAY', 10):
             with patch('time.sleep') as mock_sleep:
                 # Patch EXECUTE_COMMANDS to False to avoid additional Return keystroke
-                with patch('config.EXECUTE_COMMANDS', False):
+                with patch('xvoice2.config.EXECUTE_COMMANDS', False):
                     injector = TextInjector()
                     result = injector.inject_text("ab")
                     

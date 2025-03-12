@@ -50,8 +50,8 @@ class TestTranscriber:
         audio_file.write_text("mock audio content")
         
         with patch('os.path.exists', return_value=True):
-            with patch('transcriber.Transcriber._find_model_path', return_value='mock_model_path'):
-                with patch('config.USE_PERSISTENT_WHISPER', False):  # Disable persistence
+            with patch('xvoice2.transcriber.Transcriber._find_model_path', return_value='mock_model_path'):
+                with patch('xvoice2.config.USE_PERSISTENT_WHISPER', False):  # Disable persistence
                     transcriber = Transcriber()
                     # Make sure persistent whisper is disabled
                     transcriber.use_persistent = False
@@ -67,8 +67,8 @@ class TestTranscriber:
         audio_file.write_text("mock audio content")
         
         with patch('os.path.exists', return_value=True):
-            with patch('transcriber.Transcriber._find_model_path', return_value='mock_model_path'):
-                with patch('config.USE_PERSISTENT_WHISPER', False):
+            with patch('xvoice2.transcriber.Transcriber._find_model_path', return_value='mock_model_path'):
+                with patch('xvoice2.config.USE_PERSISTENT_WHISPER', False):
                     with patch('subprocess.run', side_effect=Exception("Command failed")):
                         transcriber = Transcriber()
                         # Disable persistent mode to ensure we use one-time transcription

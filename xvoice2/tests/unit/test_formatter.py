@@ -24,7 +24,7 @@ class TestTextFormatter:
     def test_format_text_llm_disabled(self):
         """Test that formatting is skipped when LLM is disabled."""
         # Temporarily override config.USE_LLM
-        with patch('config.USE_LLM', False):
+        with patch('xvoice2.config.USE_LLM', False):
             formatter = TextFormatter()
             result = formatter.format_text("test text")
             
@@ -40,8 +40,8 @@ class TestTextFormatter:
     def test_format_text_empty_api_key(self):
         """Test that formatting is skipped when API key is empty."""
         # Temporarily override config
-        with patch('config.USE_LLM', True):
-            with patch('config.LLM_API_KEY', ''):
+        with patch('xvoice2.config.USE_LLM', True):
+            with patch('xvoice2.config.LLM_API_KEY', ''):
                 formatter = TextFormatter()
                 result = formatter.format_text("test text")
                 
@@ -50,8 +50,8 @@ class TestTextFormatter:
     def test_format_text_api_exception(self):
         """Test handling of API exceptions."""
         # Temporarily override config
-        with patch('config.USE_LLM', True):
-            with patch('config.LLM_API_KEY', 'fake_key'):
+        with patch('xvoice2.config.USE_LLM', True):
+            with patch('xvoice2.config.LLM_API_KEY', 'fake_key'):
                 formatter = TextFormatter()
                 
                 # Mock the API call to raise an exception
@@ -63,8 +63,8 @@ class TestTextFormatter:
     def test_format_text_success(self, mock_requests_post):
         """Test successful text formatting with mocked API response."""
         # Temporarily override config
-        with patch('config.USE_LLM', True):
-            with patch('config.LLM_API_KEY', 'fake_key'):
+        with patch('xvoice2.config.USE_LLM', True):
+            with patch('xvoice2.config.LLM_API_KEY', 'fake_key'):
                 formatter = TextFormatter()
                 result = formatter.format_text("test text")
                 
@@ -94,8 +94,8 @@ class TestTextFormatter:
     
     def test_call_openai_api(self, mock_requests_post):
         """Test calling the OpenAI API with proper parameters."""
-        with patch('config.LLM_API_KEY', 'fake_key'):
-            with patch('config.LLM_MODEL', 'test-model'):
+        with patch('xvoice2.config.LLM_API_KEY', 'fake_key'):
+            with patch('xvoice2.config.LLM_MODEL', 'test-model'):
                 formatter = TextFormatter()
                 result = formatter._call_openai_api("Test prompt")
                 

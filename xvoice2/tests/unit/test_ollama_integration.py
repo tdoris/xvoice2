@@ -9,7 +9,7 @@ import json
 
 from xvoice2 import config
 from xvoice2.formatter import TextFormatter
-from main import VoiceDictationApp
+from xvoice2.main import VoiceDictationApp
 
 class TestOllamaIntegration:
     """Tests for the Ollama integration features."""
@@ -25,8 +25,8 @@ class TestOllamaIntegration:
     def test_format_text_with_ollama(self):
         """Test that formatter correctly uses Ollama when local LLM is enabled."""
         # Temporarily override config settings
-        with patch('config.USE_LOCAL_LLM', True), \
-             patch('config.USE_LLM', False):
+        with patch('xvoice2.config.USE_LOCAL_LLM', True), \
+             patch('xvoice2.config.USE_LLM', False):
             
             formatter = TextFormatter()
             
@@ -41,9 +41,9 @@ class TestOllamaIntegration:
     def test_format_text_prioritizes_ollama(self):
         """Test that Ollama is prioritized when both LLM options are enabled."""
         # Temporarily override config settings to enable both LLM options
-        with patch('config.USE_LOCAL_LLM', True), \
-             patch('config.USE_LLM', True), \
-             patch('config.LLM_API_KEY', 'fake_key'):
+        with patch('xvoice2.config.USE_LOCAL_LLM', True), \
+             patch('xvoice2.config.USE_LLM', True), \
+             patch('xvoice2.config.LLM_API_KEY', 'fake_key'):
             
             formatter = TextFormatter()
             
@@ -60,8 +60,8 @@ class TestOllamaIntegration:
     
     def test_call_ollama_api(self):
         """Test calling the Ollama API with proper parameters."""
-        with patch('config.OLLAMA_MODEL', 'test-model'), \
-             patch('config.OLLAMA_URL', 'http://test-url'):
+        with patch('xvoice2.config.OLLAMA_MODEL', 'test-model'), \
+             patch('xvoice2.config.OLLAMA_URL', 'http://test-url'):
             
             formatter = TextFormatter()
             
@@ -116,8 +116,8 @@ class TestOllamaIntegration:
             ]
         }
         
-        with patch('config.USE_LOCAL_LLM', True), \
-             patch('config.OLLAMA_MODEL', 'llama3'), \
+        with patch('xvoice2.config.USE_LOCAL_LLM', True), \
+             patch('xvoice2.config.OLLAMA_MODEL', 'llama3'), \
              patch('requests.get', side_effect=[version_response, model_response]):
             
             app = VoiceDictationApp()
@@ -132,7 +132,7 @@ class TestOllamaIntegration:
     
     def test_check_ollama_server_unavailable(self):
         """Test handling when Ollama server is not running."""
-        with patch('config.USE_LOCAL_LLM', True), \
+        with patch('xvoice2.config.USE_LOCAL_LLM', True), \
              patch('requests.get', side_effect=requests.RequestException("Connection refused")):
             
             app = VoiceDictationApp()
@@ -160,8 +160,8 @@ class TestOllamaIntegration:
             ]
         }
         
-        with patch('config.USE_LOCAL_LLM', True), \
-             patch('config.OLLAMA_MODEL', 'llama3'), \
+        with patch('xvoice2.config.USE_LOCAL_LLM', True), \
+             patch('xvoice2.config.OLLAMA_MODEL', 'llama3'), \
              patch('requests.get', side_effect=[version_response, model_response]):
             
             app = VoiceDictationApp()

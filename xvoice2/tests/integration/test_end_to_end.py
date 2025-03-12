@@ -8,8 +8,8 @@ import os
 import tempfile
 from unittest.mock import patch, MagicMock
 import sys
-import formatter  # Import for patching
-from main import VoiceDictationApp
+from xvoice2 import formatter  # Import for patching
+from xvoice2.main import VoiceDictationApp
 
 class TestEndToEnd:
     """Integration tests for the entire application."""
@@ -43,7 +43,7 @@ class TestEndToEnd:
                 with patch.object(TextInjector, 'inject_text', return_value=True):
                     with patch.object(TextInjector, 'is_available', return_value=True):
                         with patch.object(formatter.TextFormatter, 'format_text', return_value="formatted text"):
-                            with patch('config.USE_LLM', True):
+                            with patch('xvoice2.config.USE_LLM', True):
                                 # Create the application
                                 app = VoiceDictationApp(mode="general")
                                 
@@ -68,7 +68,7 @@ class TestEndToEnd:
             with patch.object(Transcriber, 'is_available', return_value=True):
                 with patch.object(TextInjector, 'inject_text', return_value=True):
                     with patch.object(TextInjector, 'is_available', return_value=True):
-                        with patch('config.USE_LLM', False):
+                        with patch('xvoice2.config.USE_LLM', False):
                             # Create the application
                             app = VoiceDictationApp(mode="general")
                             
@@ -91,7 +91,7 @@ class TestEndToEnd:
             with patch.object(TextInjector, 'is_available', return_value=True):
                 with patch.object(TextInjector, 'inject_text', return_value=False):
                     # Create the application and mock MicrophoneStream to prevent it from being used
-                    with patch('mic_stream.MicrophoneStream'):
+                    with patch('xvoice2.mic_stream.MicrophoneStream'):
                         app = VoiceDictationApp()
                         
                         # Run the application - should exit early due to missing dependencies
