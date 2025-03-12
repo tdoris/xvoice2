@@ -73,7 +73,7 @@ OLLAMA_MODEL = "llama3"  # Default Ollama model to use
 OLLAMA_URL = "http://localhost:11434/api/generate"  # Ollama API URL
 
 # Performance settings
-USE_PERSISTENT_WHISPER = True  # Keep whisper.cpp loaded for faster transcription
+USE_PERSISTENT_WHISPER = False  # Keep whisper.cpp loaded for faster transcription
 
 # Dictation mode settings
 DEFAULT_MODE = "general"  # Default dictation mode
