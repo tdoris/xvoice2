@@ -6,7 +6,7 @@ import numpy as np
 import pyaudio
 import time
 import tempfile
-from transcriber import Transcriber
+from xvoice2.transcriber import Transcriber
 
 # Create a test WAV file with a simple tone
 def create_test_audio():

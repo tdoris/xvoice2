@@ -1,0 +1,36 @@
+"""
+Local configuration settings for the XVoice2 voice dictation application.
+
+This file contains your custom configuration values. Copy this file to 
+config_local.py and modify as needed to override the defaults from config.py.
+"""
+
+import os
+import platform
+
+# Detect operating system correctly
+IS_MACOS = platform.system() == "Darwin"
+
+# Whisper model settings 
+WHISPER_MODEL = "small"  # Options: "tiny", "base", "small", "medium", "large"
+
+# Platform specific paths - MODIFY THESE FOR YOUR SYSTEM
+if IS_MACOS:
+    WHISPER_ROOT = "/Users/username/whisper.cpp"
+else:
+    WHISPER_ROOT = "/home/username/whisper.cpp"  # Adjust this to your path
+
+# Audio processing settings
+SILENCE_THRESHOLD = 0.03  # Threshold to detect silence
+SILENCE_DURATION = 1.5  # Duration of silence to trigger end of speech in seconds
+THRESHOLD_ADJUSTMENT_FACTOR = 1.2  # Values > 1 make it less sensitive to sound
+
+# LLM API settings
+USE_LLM = False  # Enable/disable LLM formatting
+# Get API key from environment variable or set directly
+LLM_API_KEY = os.environ.get("OPENAI_API_KEY", "")  # API key or empty string
+LLM_MODEL = "gpt-3.5-turbo"  # Model to use for formatting
+
+# Local LLM (Ollama) settings
+USE_LOCAL_LLM = False  # Enable/disable local LLM formatting
+OLLAMA_MODEL = "llama3"  # Default Ollama model to use

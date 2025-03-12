@@ -9,7 +9,7 @@ import json
 import platform
 import datetime
 from typing import Optional, Dict, Any
-import config
+from xvoice2 import config
 
 # Define debug_log function locally to avoid circular import with main.py
 def debug_log(message: str, end: Optional[str] = None) -> None:

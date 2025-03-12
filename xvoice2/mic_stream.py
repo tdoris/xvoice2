@@ -12,7 +12,7 @@ import time
 import platform
 import datetime
 from typing import Generator, Tuple, Optional
-import config
+from xvoice2 import config
 
 def debug_log(message: str, end: Optional[str] = None) -> None:
     """

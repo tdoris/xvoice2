@@ -16,7 +16,7 @@ import wave
 import shutil
 import datetime
 from typing import Optional, Dict, Any, Tuple
-import config
+from xvoice2 import config
 
 def debug_log(message: str, end: Optional[str] = None) -> None:
     """

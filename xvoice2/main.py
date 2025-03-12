@@ -16,11 +16,11 @@ import requests
 import datetime
 from typing import NoReturn, Optional
 
-import config
-from mic_stream import MicrophoneStream
-from transcriber import Transcriber
-from text_injector import TextInjector
-from formatter import TextFormatter
+from xvoice2 import config
+from xvoice2.mic_stream import MicrophoneStream
+from xvoice2.transcriber import Transcriber
+from xvoice2.text_injector import TextInjector
+from xvoice2.formatter import TextFormatter
 
 def debug_log(message: str, end: Optional[str] = None) -> None:
     """
