@@ -1,4 +1,4 @@
-# Voice Dictation Application
+# XVoice2
 
 A cross-platform voice dictation application that captures microphone input, transcribes speech to text, and injects the text into the active application. Supports both Linux and macOS.
 
@@ -107,16 +107,33 @@ ollama serve
 ollama pull llama3
 ```
 
-5. Install Python dependencies:
+5. Install XVoice2:
 
 ```bash
+# Clone the repository
+git clone https://github.com/tdoris/xvoice2.git
+cd xvoice2
+
+# Install in development mode
+pip install -e .
+
+# Or install just the dependencies if you don't want to install the package
 pip install -r requirements.txt
 ```
 
 ## Configuration
 
-Edit `config.py` to customize settings:
+The package comes with sensible defaults, but you can customize settings by creating a `config_local.py` file:
 
+```bash
+# Copy the example configuration file
+cp xvoice2/config_local.py.example xvoice2/config_local.py
+
+# Edit with your preferred editor
+nano xvoice2/config_local.py
+```
+
+Key settings to customize:
 - Whisper model and executable path
 - Audio capture parameters
 - Text injection settings
@@ -127,44 +144,81 @@ The application will automatically detect your operating system and use the appr
 
 ## Usage
 
+Once installed, you can run XVoice2 as a command-line application:
+
 ```bash
 # Basic usage
-python main.py
+xvoice2
 
 # With specific mode
-python main.py --mode email
+xvoice2 --mode email
 
 # With specific Whisper model
-python main.py --model medium
+xvoice2 --model medium
 
-# Enable OpenAI LLM formatting (requires API key in config.py)
-python main.py --use-llm
+# Enable OpenAI LLM formatting (requires API key in config_local.py)
+xvoice2 --use-llm
 
 # Use local Ollama for text formatting
-python main.py --use-local-llm
+xvoice2 --use-local-llm
 
 # Specify which Ollama model to use
-python main.py --use-local-llm --ollama-model llama3
+xvoice2 --use-local-llm --ollama-model llama3
 
 # List available Whisper models
-python main.py --list-models
+xvoice2 --list-models
 
 # List available Ollama models
-python main.py --list-ollama-models
+xvoice2 --list-ollama-models
+```
+
+You can also run it as a Python module if you prefer:
+
+```bash
+python -m xvoice2 --help
 ```
 
 ## Project Structure
 
-- `main.py`: Application entry point
-- `mic_stream.py`: Microphone input handling
-- `transcriber.py`: Whisper.cpp integration
-- `text_injector.py`: Text injection (wtype or AppleScript)
-- `formatter.py`: Optional LLM integration
-- `config.py`: Configuration settings
+The project is now structured as a proper Python package:
+
+```
+xvoice2/
+├── xvoice2/                 # Main package code
+│   ├── __init__.py          # Package initialization
+│   ├── __main__.py          # Entry point for python -m xvoice2
+│   ├── main.py              # Main application 
+│   ├── mic_stream.py        # Microphone input handling
+│   ├── transcriber.py       # Whisper.cpp integration
+│   ├── text_injector.py     # Text injection (wtype or AppleScript)
+│   ├── formatter.py         # Optional LLM integration
+│   ├── config.py            # Configuration settings
+│   ├── config_local.py      # Local config overrides (user-specific)
+│   └── tests/               # Test modules
+├── setup.py                 # Package setup script
+├── pyproject.toml           # PEP 517/518 build system specification
+├── MANIFEST.in              # Package data specification
+└── README.md                # This file
+```
 
 ## Troubleshooting
 
 If you encounter issues, please check the `troubleshooting.md` file for platform-specific solutions.
+
+## Development
+
+To run tests:
+
+```bash
+# Install test dependencies
+pip install -e .[test]
+
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=xvoice2 tests/
+```
 
 ## License
 
