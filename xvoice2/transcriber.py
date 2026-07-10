@@ -14,23 +14,29 @@ import signal
 import atexit
 import wave
 import shutil
-import datetime
+import re
 from typing import Optional, Dict, Any, Tuple
 from xvoice2 import config
+from xvoice2.logging_util import debug_log
 
-def debug_log(message: str, end: Optional[str] = None) -> None:
+
+def clean_transcription(raw_text: str) -> str:
     """
-    Print a debug message with a timestamp.
-    
+    Strip whisper artifacts (timestamps, [BLANK_AUDIO]) and collapse whitespace.
+
     Args:
-        message: The message to print
-        end: Optional ending character (default is newline)
+        raw_text: Raw text emitted by whisper
+
+    Returns:
+        Cleaned transcription text
     """
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    if end is not None:
-        print(f"[{timestamp}] {message}", end=end, flush=True)
-    else:
-        print(f"[{timestamp}] {message}")
+    # Remove timestamp patterns like [00:00:00.000 --> 00:00:02.000]
+    clean_text = re.sub(r'\[\d+:\d+:\d+\.\d+ --> \d+:\d+:\d+\.\d+\]\s*', '', raw_text)
+    # Remove [BLANK_AUDIO] entries
+    clean_text = re.sub(r'\[BLANK_AUDIO\]', '', clean_text)
+    # Collapse repeated whitespace and trim
+    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+    return clean_text
 
 class WhisperServerProcess:
     """Manages a persistent Whisper.cpp server process for faster transcription."""
@@ -300,11 +306,8 @@ class WhisperServerProcess:
                         return None
                     
                     # Clean up the text
-                    import re
-                    clean_text = re.sub(r'\[\d+:\d+:\d+\.\d+ --> \d+:\d+:\d+\.\d+\]\s*', '', raw_text)
-                    clean_text = re.sub(r'\[BLANK_AUDIO\]', '', clean_text)
-                    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-                    
+                    clean_text = clean_transcription(raw_text)
+
                     if not clean_text:
                         print("Empty transcription returned")
                         return None
@@ -364,23 +367,6 @@ class Transcriber:
         self.api_model = getattr(config, 'WHISPER_API_MODEL', 'whisper-1')
         self.api_language = getattr(config, 'WHISPER_API_LANGUAGE', 'en')
         
-    def _convert_audio_for_server(self, audio_file: str) -> Optional[str]:
-        """
-        Convert audio to 16kHz mono WAV for compatibility with whisper-server.
-        
-        Args:
-            audio_file: Path to the input audio file
-            
-        Returns:
-            Path to the converted file or None if conversion failed
-        """
-        # If we have a persistent process with conversion capability, use that
-        if self.persistent_process:
-            return self.persistent_process._convert_audio_to_16k_wav(audio_file)
-            
-        # Otherwise return the original file and let the server handle it
-        return audio_file
-    
     def _init_persistent_process(self) -> bool:
         """
         Initialize the persistent Whisper process.
@@ -505,23 +491,13 @@ class Transcriber:
                     debug_log("Failed to start Whisper server, falling back to one-time transcription")
                     self.use_persistent = False  # Disable persistence for future calls
                     
-            # If server is running, use it
+            # If server is running, use it. WhisperServerProcess.transcribe()
+            # performs the 16kHz-mono conversion itself (and cleans up its own
+            # temp file), so we pass the original audio file straight through to
+            # avoid converting twice.
             if self.persistent_process and self.persistent_process.running:
                 debug_log("Using Whisper server for transcription")
-                
-                # Convert audio to 16kHz mono WAV for compatibility with whisper-server
-                converted_file = self._convert_audio_for_server(audio_file)
-                if converted_file:
-                    result = self.persistent_process.transcribe(converted_file)
-                    # Clean up the temporary converted file if different
-                    if converted_file != audio_file:
-                        try:
-                            os.remove(converted_file)
-                        except:
-                            pass
-                    return result
-                else:
-                    debug_log("Audio conversion failed, falling back to standalone process")
+                return self.persistent_process.transcribe(audio_file)
         
         # Fall back to one-time transcription if server isn't available
         debug_log("Using standalone Whisper process")
@@ -553,31 +529,10 @@ class Transcriber:
                 
                 # Extract and clean the text
                 raw_text = output.get('text', '').strip()
-                
-                # Clean up timestamp patterns and [BLANK_AUDIO]
-                import re
-                
-                # Remove timestamp patterns like [00:00:00.000 --> 00:00:02.000]
-                clean_text = re.sub(r'\[\d+:\d+:\d+\.\d+ --> \d+:\d+:\d+\.\d+\]\s*', '', raw_text)
-                
-                # Remove [BLANK_AUDIO] entries
-                clean_text = re.sub(r'\[BLANK_AUDIO\]', '', clean_text)
-                
-                # Remove double spaces and trim
-                clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-                
-                return clean_text
+                return clean_transcription(raw_text)
             except json.JSONDecodeError:
-                # Try to extract the actual transcription from raw output
-                import re
-                
-                # Extract what appears to be the actual text content (remove timestamps and [BLANK_AUDIO])
-                raw_text = result.stdout.strip()
-                clean_text = re.sub(r'\[\d+:\d+:\d+\.\d+ --> \d+:\d+:\d+\.\d+\]\s*', '', raw_text)
-                clean_text = re.sub(r'\[BLANK_AUDIO\]', '', clean_text)
-                clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-                
-                return clean_text
+                # Fall back to cleaning the raw stdout when it isn't valid JSON
+                return clean_transcription(result.stdout.strip())
                 
         except subprocess.CalledProcessError as e:
             print(f"Transcription error: {e}")
@@ -618,7 +573,7 @@ class Transcriber:
                 "https://api.openai.com/v1/audio/transcriptions",
                 headers={"Authorization": f"Bearer {self.api_key}"},
                 files=files,
-                timeout=10  # Longer timeout for audio processing
+                timeout=getattr(config, 'WHISPER_API_TIMEOUT', 30)  # Audio uploads can be slow
             )
             
             # Check response status

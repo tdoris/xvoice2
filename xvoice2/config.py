@@ -16,11 +16,11 @@ IS_MACOS = platform.system() == "Darwin"
 # Whisper model settings
 WHISPER_MODEL = "base"  # Options: "tiny", "base", "small", "medium", "large"
 
-# Whisper installation root path
-if IS_MACOS:
-    WHISPER_ROOT = "/Users/tomdoris/whisper.cpp"
-else:
-    WHISPER_ROOT = "/home/jim/repos/whisper.cpp"
+# Whisper installation root path.
+# Neutral default so a fresh clone works out of the box: honor the WHISPER_ROOT
+# environment variable if set, otherwise fall back to ~/whisper.cpp. Override in
+# config_local.py for machine-specific installs.
+WHISPER_ROOT = os.environ.get("WHISPER_ROOT", os.path.expanduser("~/whisper.cpp"))
 
 # Whisper paths relative to root
 WHISPER_EXECUTABLE = os.path.join(WHISPER_ROOT, "build/bin/whisper-cli")
@@ -42,6 +42,7 @@ USE_WHISPER_API = False  # Enable/disable OpenAI Whisper API for transcription
 WHISPER_API_KEY = os.environ.get("OPENAI_API_KEY", "")  # Reuse OpenAI key or set separately
 WHISPER_API_MODEL = "whisper-1"  # OpenAI Whisper model to use
 WHISPER_API_LANGUAGE = "en"  # Language hint for API (optional)
+WHISPER_API_TIMEOUT = 30  # Timeout (seconds) for Whisper API audio uploads
 
 # PortAudio settings
 SAMPLE_RATE = 16000  # Sample rate in Hz
@@ -52,13 +53,21 @@ FORMAT = "int16"  # Audio format
 # Audio processing settings
 CHUNK_DURATION = 2  # Duration of audio chunks in seconds
 MAX_SENTENCE_DURATION = 20  # Maximum duration in seconds for a single sentence
-SILENCE_THRESHOLD = 0.03  # Threshold to detect silence (legacy, used as fallback)
+SILENCE_THRESHOLD = 1000  # Silence threshold on the int16 amplitude scale (fallback when auto-calibration is disabled)
 SILENCE_DURATION = 1.0  # Duration of silence to trigger end of speech in seconds
 THRESHOLD_ADJUSTMENT_FACTOR = 1.0  # Multiplier for auto-calibrated threshold (>1 = less sensitive, <1 = more sensitive)
 CALIBRATION_ENABLED = True  # Whether to use auto-calibration for silence detection
+# Minimum fraction of frames that must cross the threshold for a captured clip
+# to count as real speech (rejects stray clicks/pops without discarding genuine
+# utterances that contain gaps/trailing silence). Lower = more permissive.
+MIN_VOICE_ACTIVITY_RATIO = 0.10
 
 # Text injection settings
 TYPING_DELAY = 0  # Delay between characters in milliseconds (0 for no delay)
+# Delay (seconds) before the first keystroke on macOS. Gives the target app time
+# to be ready so the first character/word isn't dropped by System Events. Set to
+# 0 to disable.
+INJECTION_START_DELAY = 0.15
 
 # LLM API settings
 USE_LLM = False  # Enable/disable LLM formatting
@@ -66,6 +75,9 @@ USE_LLM = False  # Enable/disable LLM formatting
 LLM_API_KEY = os.environ.get("OPENAI_API_KEY", "")  # Get API key from environment or use empty string
 LLM_MODEL = "gpt-3.5-turbo"  # Model to use for formatting
 LLM_PROMPT = "Fix grammar and punctuation only in the following text, maintain original meaning and style: "
+# Timeout (seconds) for LLM formatting requests (OpenAI and Ollama). Needs to be
+# generous enough for larger models / slower networks to avoid silent fallbacks.
+LLM_REQUEST_TIMEOUT = 30
 
 # Local LLM settings (Ollama)
 USE_LOCAL_LLM = False  # Enable/disable local LLM formatting
@@ -80,8 +92,18 @@ DEFAULT_MODE = "general"  # Default dictation mode
 AVAILABLE_MODES = ["general", "command", "email"]
 
 # In command mode, should the Enter key be pressed after injecting text?
-# This will execute the command in a terminal
-EXECUTE_COMMANDS = True  # Set to False to only type commands without executing them
+# This will execute the command in a terminal.
+#
+# SAFETY: command mode converts speech into a shell command via an LLM and types
+# it into the active window. Auto-pressing Enter would execute whatever the LLM
+# produced (including transcription errors / hallucinations) with no review, so
+# this defaults to False: the command is typed but NOT executed until you press
+# Enter yourself. Set to True only if you understand the risk.
+EXECUTE_COMMANDS = False  # Set to True to automatically execute typed commands
+
+# When EXECUTE_COMMANDS is True, require an interactive confirmation in the
+# XVoice terminal before the command is injected/executed.
+CONFIRM_COMMANDS = True
 
 # Mode-specific LLM prompts
 MODE_PROMPTS = {

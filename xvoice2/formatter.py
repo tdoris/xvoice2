@@ -7,24 +7,9 @@ Supports both cloud APIs (OpenAI) and local models via Ollama.
 import requests
 import json
 import platform
-import datetime
 from typing import Optional, Dict, Any
 from xvoice2 import config
-
-# Define debug_log function locally to avoid circular import with main.py
-def debug_log(message: str, end: Optional[str] = None) -> None:
-    """
-    Print a debug message with a timestamp.
-    
-    Args:
-        message: The message to print
-        end: Optional ending character (default is newline)
-    """
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    if end is not None:
-        print(f"[{timestamp}] {message}", end=end, flush=True)
-    else:
-        print(f"[{timestamp}] {message}")
+from xvoice2.logging_util import debug_log
 
 class TextFormatter:
     """Handles formatting transcribed text using LLM APIs."""
@@ -164,7 +149,7 @@ Instruction: """
                 "https://api.openai.com/v1/chat/completions",
                 headers=headers,
                 data=json.dumps(data),
-                timeout=5  # Short timeout to ensure low latency
+                timeout=config.LLM_REQUEST_TIMEOUT
             )
             
             debug_log(f"OpenAI API status code: {response.status_code}")
@@ -203,16 +188,20 @@ Instruction: """
             "prompt": prompt,
             "system": system_message,
             "stream": False,
-            "temperature": 0.3,  # Low temperature for more consistent results
+            # Ollama expects generation parameters under "options"; a top-level
+            # "temperature" key is silently ignored.
+            "options": {
+                "temperature": 0.3,  # Low temperature for more consistent results
+            },
         }
-        
+
         try:
             debug_log("Sending request to Ollama API")
             response = requests.post(
                 self.ollama_url,
                 headers=headers,
                 data=json.dumps(data),
-                timeout=5  # Short timeout to ensure low latency
+                timeout=config.LLM_REQUEST_TIMEOUT
             )
             
             debug_log(f"Ollama API status code: {response.status_code}")

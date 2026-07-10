@@ -14,27 +14,14 @@ import argparse
 import platform
 import requests
 import datetime
-from typing import NoReturn, Optional
+from typing import NoReturn
 
 from xvoice2 import config
+from xvoice2.logging_util import debug_log
 from xvoice2.mic_stream import MicrophoneStream
 from xvoice2.transcriber import Transcriber
 from xvoice2.text_injector import TextInjector
 from xvoice2.formatter import TextFormatter
-
-def debug_log(message: str, end: Optional[str] = None) -> None:
-    """
-    Print a debug message with a timestamp.
-    
-    Args:
-        message: The message to print
-        end: Optional ending character (default is newline)
-    """
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    if end is not None:
-        print(f"[{timestamp}] {message}", end=end, flush=True)
-    else:
-        print(f"[{timestamp}] {message}")
 
 class VoiceDictationApp:
     """Main voice dictation application class."""
@@ -85,8 +72,11 @@ class VoiceDictationApp:
                 print("Please make sure whisper.cpp is installed and in your PATH")
             return False
         
-        # Check if the selected model is available
-        if not self.transcriber.is_model_available():
+        # Check if the selected local model is available. This only applies to
+        # local whisper.cpp transcription; when using the OpenAI Whisper API no
+        # local model file is required.
+        using_api = getattr(config, 'USE_WHISPER_API', False) and self.transcriber.api_key
+        if not using_api and not self.transcriber.is_model_available():
             print(f"Error: Selected Whisper model '{self.transcriber.model}' not found")
             print(self.transcriber.get_model_installation_instructions())
             return False
@@ -218,11 +208,39 @@ class VoiceDictationApp:
             debug_log(f"LLM formatting is NOT enabled")
             formatted_text = transcription
             
+        # Safety gate: in command mode with auto-execution enabled, optionally
+        # require explicit confirmation before typing (and running) an
+        # LLM-generated shell command.
+        if (self.mode == "command"
+                and getattr(config, 'EXECUTE_COMMANDS', False)
+                and getattr(config, 'CONFIRM_COMMANDS', True)):
+            print()
+            if not self._confirm_command(formatted_text):
+                debug_log("Command execution cancelled by user.")
+                return
+
         # Step 3: Inject the text into the active window
         debug_log("Injecting text...", end="")
         success = self.text_injector.inject_text(formatted_text)
         print(" Done" if success else " Failed")
         debug_log(f"Final text injected: '{formatted_text}'")
+
+    def _confirm_command(self, command: str) -> bool:
+        """
+        Ask the user to confirm before an auto-executed command is injected.
+
+        Args:
+            command: The command that would be typed and executed
+
+        Returns:
+            True if the user confirmed, False otherwise
+        """
+        try:
+            answer = input(f"About to execute command: '{command}'\nProceed? [y/N] ")
+        except EOFError:
+            # No interactive terminal available; err on the side of caution.
+            return False
+        return answer.strip().lower() in ("y", "yes")
 
 
 def main():

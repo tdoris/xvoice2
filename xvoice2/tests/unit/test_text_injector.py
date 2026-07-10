@@ -50,26 +50,37 @@ class TestTextInjector:
     def test_inject_text_macos_success(self, mock_subprocess_run, mock_platform_macos):
         """Test successful text injection on macOS."""
         mock_subprocess_run.return_value = MagicMock(returncode=0)
-        
-        injector = TextInjector()
-        result = injector.inject_text("test text")
-        
+
+        # Disable the pre-injection start delay so the test doesn't really sleep
+        with patch('xvoice2.config.INJECTION_START_DELAY', 0):
+            injector = TextInjector()
+            result = injector.inject_text("test text")
+
         assert result is True
         mock_subprocess_run.assert_called_once()
         # Check that we're calling osascript
         args, _ = mock_subprocess_run.call_args
         command_args = args[0]
         assert command_args[0] == "osascript"
-    
+
+    def test_escape_applescript(self):
+        """Regression: AppleScript escaping must handle backslashes and quotes."""
+        # Backslash escaped first, then double quotes
+        assert TextInjector._escape_applescript(r'a\b') == r'a\\b'
+        assert TextInjector._escape_applescript('say "hi"') == 'say \\"hi\\"'
+        assert TextInjector._escape_applescript(r'c:\path "x"') == r'c:\\path \"x\"'
+
     def test_inject_text_macos_with_delay(self, mock_subprocess_run, mock_platform_macos):
         """Test text injection on macOS with typing delay."""
         with patch('xvoice2.config.TYPING_DELAY', 10):
             with patch('time.sleep') as mock_sleep:
-                # Patch EXECUTE_COMMANDS to False to avoid additional Return keystroke
-                with patch('xvoice2.config.EXECUTE_COMMANDS', False):
+                # Patch EXECUTE_COMMANDS to False to avoid additional Return keystroke,
+                # and disable the start delay so only per-character sleeps are counted.
+                with patch('xvoice2.config.EXECUTE_COMMANDS', False), \
+                     patch('xvoice2.config.INJECTION_START_DELAY', 0):
                     injector = TextInjector()
                     result = injector.inject_text("ab")
-                    
+
                     assert result is True
                     # Should call subprocess.run once per character
                     assert mock_subprocess_run.call_count == 2
@@ -163,10 +174,24 @@ class TestTextInjector:
         
         injector = TextInjector()
         result = injector.inject_keypress("Return")
-        
+
         assert result is True
         mock_subprocess_run.assert_called_once()
-    
+
+    def test_inject_keypress_macos_uses_numeric_key_code(self, mock_subprocess_run, mock_platform_macos):
+        """Regression: known keys must map to numeric AppleScript key codes.
+
+        The previous 'key code {return}' form was invalid AppleScript.
+        """
+        mock_subprocess_run.return_value = MagicMock(returncode=0)
+
+        injector = TextInjector()
+        injector.inject_keypress("Return")
+
+        args, _ = mock_subprocess_run.call_args
+        script = args[0][-1]  # osascript -e <script>
+        assert "key code 36" in script
+
     def test_inject_keypress_linux(self, mock_subprocess_run, mock_platform_linux):
         """Test injecting a special keypress on Linux."""
         mock_subprocess_run.return_value = MagicMock(returncode=0)

@@ -76,7 +76,31 @@ class TestWhisperAPI:
             finally:
                 # Clean up the temporary file
                 os.unlink(temp_path)
-    
+
+    def test_check_dependencies_skips_local_model_when_using_api(self):
+        """Regression: API mode must not require a local model file.
+
+        check_dependencies() previously failed when the Whisper API was in use
+        but no local ggml-*.bin model was installed.
+        """
+        from xvoice2.main import VoiceDictationApp
+
+        with patch('xvoice2.config.USE_WHISPER_API', True), \
+             patch('xvoice2.config.WHISPER_API_KEY', 'test_key'), \
+             patch('xvoice2.config.USE_LOCAL_LLM', False):
+            app = VoiceDictationApp()
+            with patch.object(app.transcriber, 'is_available', return_value=True), \
+                 patch.object(app.text_injector, 'is_available', return_value=True), \
+                 patch.object(app.transcriber, 'is_model_available', return_value=False) as mock_model:
+                app.transcriber.use_api = True
+                app.transcriber.api_key = 'test_key'
+
+                result = app.check_dependencies()
+
+                assert result is True
+                # The local model check must be skipped entirely in API mode
+                mock_model.assert_not_called()
+
     @patch('requests.post')
     def test_transcribe_with_api_success(self, mock_post):
         """Test successful Whisper API transcription."""

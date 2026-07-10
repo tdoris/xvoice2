@@ -8,24 +8,9 @@ import shlex
 import time
 import platform
 import os
-import datetime
 from typing import Optional
 from xvoice2 import config
-
-# Define debug_log function locally to avoid circular import with main.py
-def debug_log(message: str, end: Optional[str] = None) -> None:
-    """
-    Print a debug message with a timestamp.
-    
-    Args:
-        message: The message to print
-        end: Optional ending character (default is newline)
-    """
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    if end is not None:
-        print(f"[{timestamp}] {message}", end=end, flush=True)
-    else:
-        print(f"[{timestamp}] {message}")
+from xvoice2.logging_util import debug_log
 
 class TextInjector:
     """Handles injecting text into the active application using the platform-appropriate method."""
@@ -48,6 +33,22 @@ class TextInjector:
             if self.is_x11:
                 self.executable = "xdotool"
         
+    @staticmethod
+    def _escape_applescript(text: str) -> str:
+        """
+        Escape text for safe embedding in an AppleScript string literal.
+
+        Backslashes must be escaped before double quotes so we don't double-escape
+        the escape character itself.
+
+        Args:
+            text: Raw text to escape
+
+        Returns:
+            Text safe to place inside AppleScript double quotes
+        """
+        return text.replace('\\', '\\\\').replace('"', '\\"')
+
     def set_mode(self, mode: str) -> None:
         """
         Set the current dictation mode.
@@ -86,9 +87,16 @@ class TextInjector:
             True if text injection was successful, False otherwise
         """
         try:
+            # Give the target application a moment to be ready to receive input.
+            # Without this, System Events frequently drops the first character(s)
+            # of the very first keystroke.
+            start_delay = getattr(config, 'INJECTION_START_DELAY', 0)
+            if start_delay > 0:
+                time.sleep(start_delay)
+
             # Escape the text for AppleScript
-            escaped_text = text.replace('"', '\\"')
-            
+            escaped_text = self._escape_applescript(text)
+
             # Use AppleScript to type the text
             applescript = f'tell application "System Events" to keystroke "{escaped_text}"'
             
@@ -102,7 +110,7 @@ class TextInjector:
             if self.typing_delay > 0:
                 # Simulate typing with delay for each character
                 for char in text:
-                    char_escaped = char.replace('"', '\\"')
+                    char_escaped = self._escape_applescript(char)
                     char_script = f'tell application "System Events" to keystroke "{char_escaped}"'
                     subprocess.run(["osascript", "-e", char_script], check=True)
                     time.sleep(self.typing_delay / 1000.0)  # Convert ms to seconds
@@ -255,19 +263,30 @@ class TextInjector:
         """
         if self.is_macos:
             try:
-                # Convert key name to macOS AppleScript key code if needed
-                key_map = {
-                    "Return": "return",
-                    "BackSpace": "delete",
-                    "Tab": "tab",
-                    "space": "space",
-                    "Escape": "escape",
+                # Map key names to macOS virtual key codes. "key code" requires a
+                # numeric code (the previous "key code {return}" form was invalid
+                # AppleScript and always failed).
+                key_code_map = {
+                    "Return": 36,
+                    "Enter": 36,
+                    "Tab": 48,
+                    "space": 49,
+                    "BackSpace": 51,
+                    "Escape": 53,
                     # Add more key mappings as needed
                 }
-                
-                applescript_key = key_map.get(key, key)
-                applescript = f'tell application "System Events" to key code {{{applescript_key}}}'
-                
+
+                if key in key_code_map:
+                    applescript = (
+                        f'tell application "System Events" to key code {key_code_map[key]}'
+                    )
+                else:
+                    # Fall back to typing the key name as a literal keystroke
+                    escaped_key = self._escape_applescript(key)
+                    applescript = (
+                        f'tell application "System Events" to keystroke "{escaped_key}"'
+                    )
+
                 subprocess.run(["osascript", "-e", applescript], check=True)
                 return True
             except subprocess.SubprocessError as e:

@@ -108,4 +108,4 @@ class TestTextFormatter:
                 assert args[0] == "https://api.openai.com/v1/chat/completions"
                 assert kwargs['headers']['Authorization'] == "Bearer fake_key"
                 assert kwargs['data'] is not None
-                assert kwargs['timeout'] == 5
+                assert kwargs['timeout'] == config.LLM_REQUEST_TIMEOUT

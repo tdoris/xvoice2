@@ -87,9 +87,10 @@ class TestOllamaIntegration:
                 assert data['model'] == 'test-model'
                 assert data['prompt'] == 'Test prompt'
                 assert data['system'] == 'You are a helpful assistant that fixes grammar and punctuation only.'
-                assert data['temperature'] == 0.3
+                # Ollama expects generation params under "options", not top-level
+                assert data['options']['temperature'] == 0.3
                 assert data['stream'] is False
-                assert kwargs['timeout'] == 5
+                assert kwargs['timeout'] == config.LLM_REQUEST_TIMEOUT
     
     def test_call_ollama_api_exception(self):
         """Test handling of Ollama API exceptions."""

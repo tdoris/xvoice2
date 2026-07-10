@@ -9,6 +9,10 @@ __pycache__/
 venv/
 env/
 ENV/
+xvoice_venv/
+
+# Local, machine-specific configuration (copy config_local.py.example)
+config_local.py
 
 # macOS
 .DS_Store

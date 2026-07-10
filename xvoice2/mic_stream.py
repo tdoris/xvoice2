@@ -13,20 +13,7 @@ import platform
 import datetime
 from typing import Generator, Tuple, Optional
 from xvoice2 import config
-
-def debug_log(message: str, end: Optional[str] = None) -> None:
-    """
-    Print a debug message with a timestamp.
-    
-    Args:
-        message: The message to print
-        end: Optional ending character (default is newline)
-    """
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    if end is not None:
-        print(f"[{timestamp}] {message}", end=end, flush=True)
-    else:
-        print(f"[{timestamp}] {message}")
+from xvoice2.logging_util import debug_log
 
 class MicrophoneStream:
     """Handles microphone streaming and processing for voice dictation."""
@@ -51,6 +38,7 @@ class MicrophoneStream:
         self.stream = None
         self.temp_dir = tempfile.mkdtemp()
         self.device_index = None
+        self._closed = False
         
         # For tracking speech and processing times
         self.speech_end_time = None
@@ -143,32 +131,93 @@ class MicrophoneStream:
                 raise
     
     def close(self) -> None:
-        """Close and clean up audio resources."""
+        """Close and clean up audio resources.
+
+        Safe to call more than once: both ``listen_continuous`` (in its
+        ``finally`` block) and the context-manager ``__exit__`` invoke this, so
+        it must be idempotent.
+        """
+        if self._closed:
+            return
+        self._closed = True
+
         if self.stream:
-            self.stream.stop_stream()
-            self.stream.close()
-        self.audio.terminate()
-        
+            try:
+                self.stream.stop_stream()
+                self.stream.close()
+            except Exception as e:
+                debug_log(f"Error closing audio stream: {e}")
+            self.stream = None
+
+        if self.audio:
+            try:
+                self.audio.terminate()
+            except Exception as e:
+                debug_log(f"Error terminating PyAudio: {e}")
+            self.audio = None
+
         # Clean up temporary files
-        for file in os.listdir(self.temp_dir):
-            os.remove(os.path.join(self.temp_dir, file))
-        os.rmdir(self.temp_dir)
+        if self.temp_dir:
+            try:
+                for file in os.listdir(self.temp_dir):
+                    os.remove(os.path.join(self.temp_dir, file))
+                os.rmdir(self.temp_dir)
+            except OSError as e:
+                debug_log(f"Error cleaning up temp directory: {e}")
     
+    def effective_threshold(self) -> float:
+        """
+        Return the silence threshold to use for detection and diagnostics.
+
+        Uses the dynamically calibrated threshold when available, otherwise the
+        configured static threshold. ``adaptive_threshold`` is initialized to
+        None (calibration disabled or not yet run), so every consumer that does
+        math or formatting with it must go through here to avoid a TypeError.
+        """
+        if self.adaptive_threshold is not None:
+            return self.adaptive_threshold
+        return self.silence_threshold
+
+    def _voice_activity_ratio(self, audio_array: np.ndarray, threshold: float) -> float:
+        """
+        Fraction of frames in a clip whose peak amplitude crosses the threshold.
+
+        This is a robust discriminator between genuine speech (many active
+        frames) and a stray click/pop (a single spike in otherwise silent
+        audio). It is unaffected by the trailing silence and inter-word gaps
+        that drag down a clip's average amplitude.
+
+        Args:
+            audio_array: int16 samples of the captured clip
+            threshold: Amplitude threshold for an "active" frame
+
+        Returns:
+            Ratio in [0.0, 1.0]
+        """
+        frame_len = self.chunk_size
+        n_frames = len(audio_array) // frame_len
+        if n_frames == 0:
+            max_amplitude = np.max(np.abs(audio_array)) if len(audio_array) else 0
+            return 1.0 if max_amplitude > threshold else 0.0
+
+        frame_peaks = np.max(
+            np.abs(audio_array[:n_frames * frame_len].reshape(n_frames, frame_len)),
+            axis=1,
+        )
+        return float(np.mean(frame_peaks > threshold))
+
     def is_silent(self, data_array: np.ndarray) -> bool:
         """
         Determine if the audio chunk is silent.
-        
+
         Args:
             data_array: Numpy array of audio data
-            
+
         Returns:
             True if the audio is below the silence threshold
         """
         max_amplitude = np.max(np.abs(data_array))
-        
-        # Use the dynamically calibrated threshold if available, otherwise fallback to hardcoded value
-        threshold = getattr(self, 'adaptive_threshold', 1000)
-        return max_amplitude < threshold
+        return max_amplitude < self.effective_threshold()
     
     def calibrate_silence_threshold(self):
         """
@@ -265,35 +314,42 @@ class MicrophoneStream:
             self.calibrate_silence_threshold()
             
         frames = []
-        silent_frames = 0
         speech_detected = False
         silence_after_speech = False
-        
+
         # Use configured maximum sentence duration
         max_frames = int(self.sample_rate / self.chunk_size * config.MAX_SENTENCE_DURATION)
         max_amplitude_seen = 0
-        
+
         try:
-            # First, wait for speech to begin
+            # First, wait for speech to begin.
+            #
+            # We keep only a short rolling buffer of pre-speech audio (so the
+            # start of the utterance isn't clipped) while capping how long we
+            # wait so the caller can periodically recalibrate during silence.
+            # `frames` is trimmed for memory, so track the total frames read
+            # separately to make the wait timeout actually reachable.
             print("Waiting for speech...")
-            while not speech_detected and len(frames) < max_frames:
+            wait_frames_read = 0
+            while not speech_detected and wait_frames_read < max_frames:
                 data = self.stream.read(self.chunk_size, exception_on_overflow=False)
                 frames.append(data)
-                
+                wait_frames_read += 1
+
                 # Convert to numpy array for silence detection
                 data_array = np.frombuffer(data, dtype=np.int16)
-                current_max = np.max(np.abs(data_array))
-                
+
                 # Check if this frame contains speech
                 if not self.is_silent(data_array):
                     speech_detected = True
                     print("Speech detected! Capturing full sentence...")
-                
+
                 # If we've captured a lot of frames with no speech, discard them and keep waiting
                 if len(frames) > 30 and not speech_detected:  # ~1 second of silence
                     frames = frames[-10:]  # Keep only last ~0.3 seconds
-            
-            # If no speech detected after max_frames, return early
+
+            # If no speech detected within the wait window, return early so the
+            # caller can recalibrate / idle.
             if not speech_detected:
                 return "", False
                 
@@ -358,7 +414,9 @@ class MicrophoneStream:
         """
         # Increase threshold if we're getting too many false positives
         if false_trigger_count > 0:
-            old_threshold = self.adaptive_threshold
+            # Fall back to the static threshold if calibration never ran, so we
+            # never do arithmetic on None.
+            old_threshold = self.effective_threshold()
             # More conservative adjustment: increase by 10% for first trigger,
             # then more gradually for subsequent triggers
             adjustment_factor = min(0.1 * false_trigger_count, 0.5)  # Cap at 50% increase
@@ -427,20 +485,31 @@ class MicrophoneStream:
                                 # Calculate energy/amplitude metrics
                                 avg_amplitude = np.mean(np.abs(audio_array))
                                 max_amplitude = np.max(np.abs(audio_array))
-                                
-                                # False positive detection - only for very short clips or very low amplitude
-                                # For audio to be considered actual speech it should either:
-                                # 1. Be very short (< 0.3s) which is too brief for real speech, OR
-                                # 2. Have extremely low average amplitude compared to threshold (< 30% of threshold)
-                                if duration < 0.3 or avg_amplitude < (self.adaptive_threshold * 0.3):
-                                    debug_log(f"Possible false trigger: duration={duration:.2f}s, avg_amp={avg_amplitude:.1f}, max_amp={max_amplitude:.1f}, threshold={self.adaptive_threshold:.1f}")
+
+                                # Voice-activity ratio: the fraction of frames
+                                # whose peak crosses the threshold. This is a far
+                                # better discriminator than average amplitude,
+                                # which is dragged down by the trailing silence
+                                # and inter-word gaps in a real utterance (a whole
+                                # spoken sentence can average well under the
+                                # threshold while still being genuine speech).
+                                threshold = self.effective_threshold()
+                                active_ratio = self._voice_activity_ratio(audio_array, threshold)
+
+                                # False positive detection: discard only clips that
+                                # are too short to be speech, or that contain almost
+                                # no above-threshold frames (a stray click/pop in a
+                                # sea of silence).
+                                min_active_ratio = getattr(config, 'MIN_VOICE_ACTIVITY_RATIO', 0.10)
+                                if duration < 0.3 or active_ratio < min_active_ratio:
+                                    debug_log(f"Possible false trigger: duration={duration:.2f}s, active_ratio={active_ratio:.2f}, avg_amp={avg_amplitude:.1f}, max_amp={max_amplitude:.1f}, threshold={threshold:.1f}")
                                     false_trigger_count += 1
                                     self.recalibrate_if_needed(false_trigger_count)
                                     os.remove(file_path)  # Clean up the audio file
                                     continue
-                                
+
                                 # Log actual speech characteristics for debugging
-                                debug_log(f"Speech audio metrics: duration={duration:.2f}s, avg_amp={avg_amplitude:.1f}, max_amp={max_amplitude:.1f}, threshold={self.adaptive_threshold:.1f}")
+                                debug_log(f"Speech audio metrics: duration={duration:.2f}s, active_ratio={active_ratio:.2f}, avg_amp={avg_amplitude:.1f}, max_amp={max_amplitude:.1f}, threshold={threshold:.1f}")
                         except Exception as e:
                             debug_log(f"Error checking audio: {e}")
                     

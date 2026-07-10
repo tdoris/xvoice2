@@ -53,7 +53,91 @@ class TestMicrophoneStream:
             
             result = stream.is_silent(mock_audio_data_speech)
             assert result == False
-    
+
+    def test_is_silent_uses_fallback_when_uncalibrated(self, mock_audio_data_silent):
+        """Regression: is_silent must not crash when adaptive_threshold is None.
+
+        adaptive_threshold is initialized to None, so it must fall back to the
+        configured static threshold rather than comparing against None.
+        """
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            assert stream.adaptive_threshold is None  # never calibrated
+            # Should use config.SILENCE_THRESHOLD and not raise a TypeError
+            assert stream.is_silent(mock_audio_data_silent) == True
+
+    def test_voice_activity_ratio_detects_real_speech(self):
+        """Regression: a real utterance must not be treated as a false trigger.
+
+        Reproduces the logged failure where clips with strong speech peaks were
+        discarded because their *average* amplitude fell below 30% of threshold.
+        A low-average clip with sustained above-threshold frames must yield a
+        high voice-activity ratio.
+        """
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            stream.chunk_size = 1024
+            threshold = 500
+
+            # The "speech" half models a real waveform: strong per-frame peaks
+            # that oscillate through zero, so the per-frame peak is high while
+            # the overall average stays low (like the wrongly-discarded clips).
+            speech = np.zeros(1024 * 24, dtype=np.int16)
+            speech[::1024] = 5000
+            speech[512::1024] = -5000
+            silence = np.zeros(1024 * 24, dtype=np.int16)
+            clip = np.concatenate([speech, silence])
+
+            ratio = stream._voice_activity_ratio(clip, threshold)
+            assert ratio > 0.10
+            # Its average amplitude would have failed the old avg < 0.3*thr test
+            assert np.mean(np.abs(clip)) < threshold * 0.3
+
+    def test_voice_activity_ratio_rejects_stray_click(self):
+        """A lone click in a sea of silence yields a near-zero activity ratio."""
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            stream.chunk_size = 1024
+            threshold = 500
+
+            clip = np.zeros(1024 * 20, dtype=np.int16)
+            clip[5000:5050] = 8000  # a single brief spike
+
+            ratio = stream._voice_activity_ratio(clip, threshold)
+            assert ratio < 0.10
+
+    def test_effective_threshold_falls_back_when_uncalibrated(self):
+        """effective_threshold() returns the static threshold when uncalibrated."""
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            assert stream.adaptive_threshold is None
+            assert stream.effective_threshold() == config.SILENCE_THRESHOLD
+
+            stream.adaptive_threshold = 1234
+            assert stream.effective_threshold() == 1234
+
+    def test_recalibrate_if_needed_uncalibrated_no_crash(self):
+        """Regression: false-trigger recalibration must not multiply None."""
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            assert stream.adaptive_threshold is None
+
+            stream.recalibrate_if_needed(false_trigger_count=1)
+            assert stream.adaptive_threshold is not None
+            assert stream.adaptive_threshold > config.SILENCE_THRESHOLD
+
+    @patch('tempfile.mkdtemp')
+    def test_close_is_idempotent(self, mock_mkdtemp):
+        """Regression: close() must be safe to call more than once."""
+        mock_mkdtemp.return_value = "/tmp/mock_dir"
+        with patch('pyaudio.PyAudio'):
+            with patch('os.listdir', return_value=[]):
+                with patch('os.rmdir') as mock_rmdir:
+                    stream = MicrophoneStream()
+                    stream.close()
+                    stream.close()  # must not raise
+                    mock_rmdir.assert_called_once_with("/tmp/mock_dir")
+
     @patch('tempfile.mkdtemp')
     def test_context_manager(self, mock_mkdtemp):
         """Test that context manager properly initializes and cleans up."""
