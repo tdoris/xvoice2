@@ -112,20 +112,37 @@ MODE_PROMPTS = {
     "command": None  # This is handled dynamically in the formatter to be platform-specific
 }
 
-# Load local config if it exists
-try:
-    # Check if config_local.py exists
-    if importlib.util.find_spec("config_local"):
-        import config_local
-        
-        # Update this module's variables with values from config_local
-        current_module = sys.modules[__name__]
-        for attr in dir(config_local):
-            # Only import non-private attributes
-            if not attr.startswith('_'):
-                setattr(current_module, attr, getattr(config_local, attr))
-                
-        print("Loaded configuration from config_local.py")
-except Exception as e:
-    print(f"Warning: Could not load config_local.py: {e}")
-    print("Using default configuration")
+# Load local config overrides if present.
+#
+# Resolve the file by absolute path rather than by module name so it loads
+# reliably regardless of the current working directory / sys.path. The
+# canonical location is config_local.py next to this file (see
+# config_local.py.example); a repo-root config_local.py is also honored for
+# backward compatibility. The first one found wins.
+def _load_local_config() -> None:
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(here, "config_local.py"),               # xvoice2/config_local.py (canonical)
+        os.path.join(here, os.pardir, "config_local.py"),    # repo-root/config_local.py (legacy)
+    ]
+    for path in candidates:
+        if not os.path.exists(path):
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("xvoice2._config_local", path)
+            local = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(local)
+
+            current_module = sys.modules[__name__]
+            for attr in dir(local):
+                if not attr.startswith("_"):
+                    setattr(current_module, attr, getattr(local, attr))
+
+            print(f"Loaded configuration from {os.path.normpath(path)}")
+        except Exception as e:
+            print(f"Warning: Could not load {os.path.normpath(path)}: {e}")
+            print("Using default configuration")
+        return
+
+
+_load_local_config()
