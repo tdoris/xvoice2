@@ -161,6 +161,10 @@ class VoiceDictationApp:
         if self.wake is not None:
             self._print_wake_banner()
 
+        # Pre-load the model now so the first spoken word (often the wake word)
+        # isn't delayed by a one-time model load.
+        self.transcriber.warm_up()
+
         self.running = True
         
         try:

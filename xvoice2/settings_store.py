@@ -30,6 +30,7 @@ SETTING_TO_CONFIG = {
     "start_armed": "START_ARMED",
     "wake_notifications": "WAKE_NOTIFICATIONS",
     "append_trailing_space": "APPEND_TRAILING_SPACE",
+    "silence_duration": "SILENCE_DURATION",
 }
 
 

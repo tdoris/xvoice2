@@ -72,9 +72,11 @@ class TestGuiWiring:
         dlg = gui.SettingsDialog()
         dlg.wake_phrase.setText("hey xvoice")
         dlg.sleep_phrase.setText("goodnight")
+        dlg.silence_duration.setValue(0.5)
         collected = dlg.collect()
         assert collected["wake_phrase"] == "hey xvoice"
         assert collected["sleep_phrase"] == "goodnight"
+        assert collected["silence_duration"] == 0.5
 
     def test_tray_state_transitions(self, qapp):
         tray = gui.TrayApp(qapp)

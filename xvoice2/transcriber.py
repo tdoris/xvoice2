@@ -517,6 +517,19 @@ class Transcriber:
             self._parakeet = ParakeetTranscriber()
         return self._parakeet
 
+    def warm_up(self) -> None:
+        """Pre-load the model so the first spoken utterance isn't slow.
+
+        Only meaningful for the Parakeet engine (whisper.cpp loads per-call).
+        Failures are non-fatal: the model will load lazily on first use.
+        """
+        if self.engine == 'parakeet':
+            try:
+                debug_log("Pre-loading transcription model...")
+                self._get_parakeet_backend().warm_up()
+            except Exception as e:
+                debug_log(f"Model warm-up failed (will load on first use): {e}")
+
     def _transcribe_with_parakeet(self, audio_file: str) -> Optional[str]:
         """Transcribe using the local Parakeet backend.
 

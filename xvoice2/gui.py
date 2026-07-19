@@ -19,9 +19,9 @@ from typing import Optional
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
-    QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QSystemTrayIcon,
-    QMenu, QVBoxLayout,
+    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
+    QDoubleSpinBox, QFormLayout, QLabel, QLineEdit, QMessageBox, QProgressBar,
+    QPushButton, QSystemTrayIcon, QMenu, QVBoxLayout,
 )
 
 from xvoice2 import config
@@ -164,9 +164,20 @@ class SettingsDialog(QDialog):
         self.trailing_space.setChecked(bool(self._settings.get("append_trailing_space", True)))
         form.addRow(self.trailing_space)
 
+        self.silence_duration = QDoubleSpinBox()
+        self.silence_duration.setRange(0.3, 2.0)
+        self.silence_duration.setSingleStep(0.1)
+        self.silence_duration.setDecimals(1)
+        self.silence_duration.setSuffix(" s")
+        self.silence_duration.setValue(float(self._settings.get("silence_duration", 0.7)))
+        self.silence_duration.setToolTip(
+            "Pause length that ends an utterance. Lower = snappier response.")
+        form.addRow("End-of-speech pause", self.silence_duration)
+
         layout = QVBoxLayout(self)
         layout.addLayout(form)
-        note = QLabel("Engine and model changes take effect after restarting XVoice2.")
+        note = QLabel("Engine, model, and end-of-speech pause changes take effect "
+                      "after restarting XVoice2.")
         note.setWordWrap(True)
         layout.addWidget(note)
 
@@ -189,6 +200,7 @@ class SettingsDialog(QDialog):
             "start_armed": self.start_armed.isChecked(),
             "wake_notifications": self.notifications.isChecked(),
             "append_trailing_space": self.trailing_space.isChecked(),
+            "silence_duration": round(self.silence_duration.value(), 1),
         }
 
 

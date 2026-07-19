@@ -66,7 +66,7 @@ FORMAT = "int16"  # Audio format
 CHUNK_DURATION = 2  # Duration of audio chunks in seconds
 MAX_SENTENCE_DURATION = 20  # Maximum duration in seconds for a single sentence
 SILENCE_THRESHOLD = 1000  # Silence threshold on the int16 amplitude scale (fallback when auto-calibration is disabled)
-SILENCE_DURATION = 1.0  # Duration of silence to trigger end of speech in seconds
+SILENCE_DURATION = 0.7  # Duration of silence (s) to end an utterance. Lower = snappier wake/dictation, but ends on shorter pauses.
 THRESHOLD_ADJUSTMENT_FACTOR = 1.0  # Multiplier for auto-calibrated threshold (>1 = less sensitive, <1 = more sensitive)
 CALIBRATION_ENABLED = True  # Whether to use auto-calibration for silence detection
 # --- Non-speech clip rejection (VAD gating) ---

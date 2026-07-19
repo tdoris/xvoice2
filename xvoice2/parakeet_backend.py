@@ -41,6 +41,10 @@ class ParakeetTranscriber:
         except ImportError:
             return False
 
+    def warm_up(self) -> None:
+        """Pre-load the model so the first transcription isn't delayed."""
+        self._ensure_loaded()
+
     def _ensure_loaded(self):
         """Load and cache the Parakeet model on first use."""
         if self._model is None:

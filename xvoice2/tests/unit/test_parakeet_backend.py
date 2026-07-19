@@ -77,6 +77,12 @@ class TestParakeetBackend:
              patch("os.path.exists", return_value=True):
             assert ParakeetTranscriber().transcribe("a.wav") is None
 
+    def test_warm_up_loads_model(self):
+        mod, _ = _mock_onnx_asr()
+        with patch.dict(sys.modules, {"onnx_asr": mod}):
+            ParakeetTranscriber().warm_up()
+            mod.load_model.assert_called_once()
+
 
 class TestTranscriberEngineDispatch:
     """The Transcriber should route to Parakeet when the engine is selected."""
@@ -114,3 +120,15 @@ class TestTranscriberEngineDispatch:
     def test_is_model_available_true_for_parakeet(self):
         with patch("xvoice2.config.TRANSCRIPTION_ENGINE", "parakeet"):
             assert Transcriber().is_model_available() is True
+
+    def test_warm_up_preloads_parakeet(self):
+        with patch("xvoice2.config.TRANSCRIPTION_ENGINE", "parakeet"):
+            t = Transcriber()
+            backend = MagicMock()
+            with patch.object(t, "_get_parakeet_backend", return_value=backend):
+                t.warm_up()
+                backend.warm_up.assert_called_once()
+
+    def test_warm_up_noop_for_whisper(self):
+        # conftest pins the engine to whisper; warm_up must be a harmless no-op.
+        Transcriber().warm_up()
