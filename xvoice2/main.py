@@ -261,6 +261,16 @@ class VoiceDictationApp:
                 debug_log("Command execution cancelled by user.")
                 return
 
+        # Append a trailing space so consecutive dictated utterances are
+        # separated ("First sentence.Second" otherwise runs together). Skipped
+        # in command mode (a command is typed then executed, not accumulated)
+        # and when the text already ends in whitespace.
+        if (self.mode != "command"
+                and getattr(config, 'APPEND_TRAILING_SPACE', True)
+                and formatted_text
+                and not formatted_text[-1].isspace()):
+            formatted_text = formatted_text + " "
+
         # Step 3: Inject the text into the active window
         debug_log("Injecting text...", end="")
         success = self.text_injector.inject_text(formatted_text)

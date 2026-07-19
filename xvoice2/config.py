@@ -106,6 +106,9 @@ MAX_VOICED_ZCR = 0.20
 MIN_VOICED_DURATION = 0.12
 
 # Text injection settings
+# Append a trailing space after each dictated utterance so consecutive sentences
+# don't run together ("First.Second"). Not applied in command mode.
+APPEND_TRAILING_SPACE = True
 TYPING_DELAY = 0  # Delay between characters in milliseconds (0 for no delay)
 # Delay (seconds) before the first keystroke on macOS. Gives the target app time
 # to be ready so the first character/word isn't dropped by System Events. Set to

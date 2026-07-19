@@ -7,6 +7,22 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import platform
 
+from xvoice2 import config
+
+
+@pytest.fixture(autouse=True)
+def default_whisper_engine():
+    """Pin the transcription engine to "whisper" for tests.
+
+    Isolates the committed suite from a machine-specific config_local.py that
+    may set TRANSCRIPTION_ENGINE = "parakeet". Parakeet-specific tests override
+    this explicitly with their own patch.
+    """
+    original = getattr(config, "TRANSCRIPTION_ENGINE", "whisper")
+    config.TRANSCRIPTION_ENGINE = "whisper"
+    yield
+    config.TRANSCRIPTION_ENGINE = original
+
 @pytest.fixture
 def mock_platform_linux():
     """Fixture that mocks platform.system() to return 'Linux'."""
