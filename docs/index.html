@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XVoice2 — Offline voice dictation for Linux</title>
+<meta name="description" content="Offline, hands-free voice dictation for Linux. Type by voice into any app, or a remote desktop, using a spoken wake word. Private and local by default.">
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1d21;
+    --muted: #5a6472;
+    --card: #f5f7fa;
+    --border: #e3e8ef;
+    --accent: #2ecc71;
+    --accent-fg: #0b3d24;
+    --code-bg: #f0f2f5;
+    --maxw: 960px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216;
+      --fg: #e7ebf0;
+      --muted: #9aa5b1;
+      --card: #171b21;
+      --border: #262c34;
+      --accent: #2ecc71;
+      --accent-fg: #06210f;
+      --code-bg: #1b2027;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  a { color: inherit; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
+
+  header.hero { text-align: center; padding: 72px 20px 40px; }
+  .logo { width: 96px; height: 96px; border-radius: 22px; }
+  h1 { font-size: 2.6rem; margin: 18px 0 6px; letter-spacing: -0.02em; }
+  .tagline { font-size: 1.25rem; color: var(--muted); margin: 0 auto 8px; max-width: 640px; }
+  .sub { color: var(--muted); max-width: 620px; margin: 0 auto 28px; }
+
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+  .btn {
+    display: inline-block; padding: 13px 24px; border-radius: 10px;
+    text-decoration: none; font-weight: 600; border: 1px solid var(--border);
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+  .btn-secondary { background: transparent; color: var(--fg); }
+  .btn:hover { filter: brightness(0.96); }
+  .cta-note { color: var(--muted); font-size: 0.9rem; margin-top: 14px; }
+
+  section { padding: 40px 0; }
+  h2 { font-size: 1.5rem; margin: 0 0 20px; letter-spacing: -0.01em; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 1.05rem; }
+  .card p { margin: 0; color: var(--muted); font-size: 0.97rem; }
+
+  ol.steps { counter-reset: step; list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+  ol.steps li {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px 16px 56px; position: relative;
+  }
+  ol.steps li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 16px; top: 16px; width: 26px; height: 26px;
+    border-radius: 50%; background: var(--accent); color: var(--accent-fg);
+    font-weight: 700; font-size: 0.9rem; display: grid; place-items: center;
+  }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+  code { background: var(--code-bg); padding: 2px 6px; border-radius: 5px; }
+
+  .note { color: var(--muted); font-size: 0.92rem; border-left: 3px solid var(--border); padding: 4px 0 4px 14px; }
+
+  footer { border-top: 1px solid var(--border); padding: 28px 0 56px; color: var(--muted); text-align: center; font-size: 0.92rem; }
+  footer a { text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <img class="logo" src="xvoice2.png" alt="XVoice2 logo">
+    <h1>XVoice2</h1>
+    <p class="tagline">Offline voice dictation for Linux.</p>
+    <p class="sub">Speak, and your words are typed into whatever app has focus, even a remote
+      desktop. Hands-free with a spoken wake word. Private and local by default.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/tdoris/xvoice2/releases/latest/download/XVoice2-x86_64.AppImage">Download for Linux</a>
+      <a class="btn btn-secondary" href="https://github.com/tdoris/xvoice2">View on GitHub</a>
+    </div>
+    <p class="cta-note">A single AppImage. Download it, make it executable, and run it. No installer, no terminal required.</p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Why XVoice2</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Hands-free</h3>
+        <p>The mic is always on. Say your wake phrase to start, your sleep phrase to pause. No key to press.</p>
+      </div>
+      <div class="card">
+        <h3>Works over remote desktop</h3>
+        <p>No global hotkey to be captured by an RDP or VNC client. Your local mic is transcribed and typed into the remote session.</p>
+      </div>
+      <div class="card">
+        <h3>Private and offline</h3>
+        <p>Transcription runs entirely on your machine. Nothing is sent to the cloud unless you opt in.</p>
+      </div>
+      <div class="card">
+        <h3>Accurate, punctuated text</h3>
+        <p>Uses NVIDIA Parakeet locally, with automatic punctuation and capitalization and no stray words on silence.</p>
+      </div>
+      <div class="card">
+        <h3>Lives in your tray</h3>
+        <p>A simple tray app with a settings window: pick your engine, microphone, and wake phrases. No terminal needed.</p>
+      </div>
+      <div class="card">
+        <h3>Built for accessibility</h3>
+        <p>Designed first for people who can't easily type. Fully controllable by voice.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Get started in three steps</h2>
+    <ol class="steps">
+      <li><strong>Download</strong> the <span class="mono">XVoice2-x86_64.AppImage</span> using the button above.</li>
+      <li><strong>Make it executable</strong> (right-click → Properties → Permissions → "Allow executing", or run <code>chmod +x XVoice2-x86_64.AppImage</code>), then double-click it.</li>
+      <li><strong>First launch</strong> downloads the speech model once (about 2.4 GB), then it is ready in your system tray. Say your wake word and start dictating.</li>
+    </ol>
+    <p class="note" style="margin-top:18px">
+      Requirements: a 64-bit Linux desktop with a system tray. Text injection uses
+      <code>wtype</code> (Wayland) or <code>xdotool</code> (X11), and the tray needs
+      <code>libxcb-cursor0</code> — install with
+      <code>sudo apt install wtype xdotool libxcb-cursor0</code> if needed.
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>XVoice2 is free and open source (MIT). &nbsp;·&nbsp;
+      <a href="https://github.com/tdoris/xvoice2">Source on GitHub</a> &nbsp;·&nbsp;
+      <a href="https://github.com/tdoris/xvoice2/releases">All releases</a>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
