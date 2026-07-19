@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=XVoice2
+GenericName=Voice Dictation
+Comment=Offline voice dictation with a wake word
+Exec=xvoice2
+Icon=xvoice2
+Categories=Utility;AudioVideo;Accessibility;
+Keywords=dictation;speech;voice;transcription;
+Terminal=false
+StartupWMClass=XVoice2

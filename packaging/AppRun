@@ -1,0 +1,8 @@
+#!/bin/bash
+# AppRun for the XVoice2 AppImage. Launches the PyInstaller-bundled binary.
+HERE="$(dirname "$(readlink -f "${0}")")"
+export PATH="${HERE}/usr/bin:${PATH}"
+# Force the Qt xcb platform (Wayland sessions still provide Xwayland); the bundle
+# ships the xcb plugin and libxcb-cursor.
+export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
+exec "${HERE}/usr/bin/xvoice2" "$@"

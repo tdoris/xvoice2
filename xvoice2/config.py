@@ -207,6 +207,11 @@ MODE_PROMPTS = {
 # config_local.py.example); a repo-root config_local.py is also honored for
 # backward compatibility. The first one found wins.
 def _load_local_config() -> None:
+    # A packaged (frozen) app must never load a bundled developer config_local.py
+    # — it hardcodes the developer's machine paths. The frozen GUI sets its own
+    # defaults instead.
+    if getattr(sys, "frozen", False):
+        return
     here = os.path.dirname(os.path.abspath(__file__))
     candidates = [
         os.path.join(here, "config_local.py"),               # xvoice2/config_local.py (canonical)

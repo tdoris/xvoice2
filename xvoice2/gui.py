@@ -259,8 +259,22 @@ class TrayApp:
 
 def main() -> int:
     """Entry point for the ``xvoice2-gui`` console script."""
+    # Make logs visible when stdout is redirected (e.g. the packaged app), so
+    # troubleshooting output isn't stuck in a buffer.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if stream is not None:
+                stream.reconfigure(line_buffering=True)
+        except (AttributeError, ValueError):
+            pass
+
     # Load persisted settings before constructing the core.
-    settings_store.apply_to_config(settings_store.load_settings())
+    settings = settings_store.load_settings()
+    # The packaged (frozen) app bundles only the Parakeet engine, so default to
+    # it regardless of any inherited config.
+    if getattr(sys, "frozen", False):
+        settings["transcription_engine"] = "parakeet"
+    settings_store.apply_to_config(settings)
 
     app = QApplication(sys.argv)
     app.setApplicationName("XVoice2")
