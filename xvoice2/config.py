@@ -57,6 +57,9 @@ WHISPER_API_LANGUAGE = "en"  # Language hint for API (optional)
 WHISPER_API_TIMEOUT = 30  # Timeout (seconds) for Whisper API audio uploads
 
 # PortAudio settings
+# Preferred input device, matched by name substring (e.g. "USB" or a mic model).
+# Empty = automatic selection. Set via the GUI microphone picker.
+INPUT_DEVICE_NAME = ""
 SAMPLE_RATE = 16000  # Sample rate in Hz
 FRAMES_PER_BUFFER = 1024
 CHANNELS = 1  # Mono

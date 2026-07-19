@@ -28,6 +28,7 @@ from xvoice2 import config
 from xvoice2 import model_download
 from xvoice2 import settings_store
 from xvoice2.main import VoiceDictationApp
+from xvoice2.mic_stream import list_input_devices
 
 # Tray icon colours per state.
 _COLORS = {
@@ -134,6 +135,26 @@ class SettingsDialog(QDialog):
         self.mode.setCurrentText(self._settings.get("mode", "general"))
         form.addRow("Dictation mode", self.mode)
 
+        # Microphone picker. "Automatic" (empty) lets the app auto-select;
+        # otherwise the chosen device name is matched at startup (e.g. a USB mic
+        # so the Bose headset can stay on hi-fi A2DP).
+        self.mic = QComboBox()
+        self.mic.addItem("Automatic (default)", "")
+        current_mic = self._settings.get("input_device_name", "") or ""
+        try:
+            for _idx, name in list_input_devices():
+                self.mic.addItem(name, name)
+        except Exception:
+            pass
+        if current_mic:
+            pos = self.mic.findData(current_mic)
+            if pos < 0:
+                # Configured device not currently connected; keep it selectable.
+                self.mic.addItem(f"{current_mic} (not connected)", current_mic)
+                pos = self.mic.count() - 1
+            self.mic.setCurrentIndex(pos)
+        form.addRow("Microphone", self.mic)
+
         self.wake_enabled = QCheckBox("Require a wake word before typing")
         self.wake_enabled.setChecked(bool(self._settings.get("wake_word_enabled", True)))
         form.addRow(self.wake_enabled)
@@ -176,8 +197,8 @@ class SettingsDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
-        note = QLabel("Engine, model, and end-of-speech pause changes take effect "
-                      "after restarting XVoice2.")
+        note = QLabel("Engine, model, microphone, and end-of-speech pause changes "
+                      "take effect after restarting XVoice2.")
         note.setWordWrap(True)
         layout.addWidget(note)
 
@@ -201,6 +222,7 @@ class SettingsDialog(QDialog):
             "wake_notifications": self.notifications.isChecked(),
             "append_trailing_space": self.trailing_space.isChecked(),
             "silence_duration": round(self.silence_duration.value(), 1),
+            "input_device_name": self.mic.currentData() or "",
         }
 
 

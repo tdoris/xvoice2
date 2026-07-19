@@ -15,6 +15,28 @@ from typing import Generator, Tuple, Optional
 from xvoice2 import config
 from xvoice2.logging_util import debug_log
 
+def list_input_devices():
+    """List available audio input (capture) devices.
+
+    Returns:
+        A list of (index, name) tuples for devices with input channels. Used by
+        the GUI microphone picker. Safe to call standalone; opens no stream.
+    """
+    devices = []
+    pa = pyaudio.PyAudio()
+    try:
+        info = pa.get_host_api_info_by_index(0)
+        for i in range(info.get('deviceCount', 0)):
+            d = pa.get_device_info_by_index(i)
+            if d.get('maxInputChannels', 0) > 0:
+                devices.append((i, d.get('name', f'Device {i}')))
+    except Exception as e:
+        debug_log(f"Could not enumerate input devices: {e}")
+    finally:
+        pa.terminate()
+    return devices
+
+
 class MicrophoneStream:
     """Handles microphone streaming and processing for voice dictation."""
     
@@ -74,13 +96,22 @@ class MicrophoneStream:
             name = device_info.get('name')
             
             print(f"  - Device {i}: {name} (max inputs: {max_input_channels})")
-            
-            # Specifically prioritize the MacBook Air Microphone
+
             if max_input_channels > 0:
+                # Honor a user-configured microphone (by name substring). This
+                # is what the GUI's microphone picker sets, e.g. a USB mic.
+                preferred = getattr(config, 'INPUT_DEVICE_NAME', '') or ''
+                if preferred and name and preferred.lower() in name.lower():
+                    self.device_index = i
+                    found_device = True
+                    print(f"    -> Selected this device (matches configured '{preferred}')")
+                    break
+
+                # Otherwise take the first input device (macOS: prefer built-in).
                 if not found_device or "MacBook Air Microphone" in name:
                     self.device_index = i
                     found_device = True
-                    
+
                     if "MacBook Air Microphone" in name:
                         print(f"    -> Selected this device (MacBook Air Microphone preferred)")
                         break

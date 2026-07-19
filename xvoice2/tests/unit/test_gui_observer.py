@@ -77,6 +77,9 @@ class TestGuiWiring:
         assert collected["wake_phrase"] == "hey xvoice"
         assert collected["sleep_phrase"] == "goodnight"
         assert collected["silence_duration"] == 0.5
+        # Microphone defaults to automatic (empty) and is always collected.
+        assert collected["input_device_name"] == ""
+        assert "input_device_name" in collected
 
     def test_tray_state_transitions(self, qapp):
         tray = gui.TrayApp(qapp)

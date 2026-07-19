@@ -31,6 +31,7 @@ SETTING_TO_CONFIG = {
     "wake_notifications": "WAKE_NOTIFICATIONS",
     "append_trailing_space": "APPEND_TRAILING_SPACE",
     "silence_duration": "SILENCE_DURATION",
+    "input_device_name": "INPUT_DEVICE_NAME",
 }
 
 

@@ -203,6 +203,32 @@ class TestMicrophoneStream:
                 voiced_seconds=0.8)
             assert reason is None
 
+    def test_list_input_devices_excludes_output_only(self, mock_pyaudio):
+        from xvoice2.mic_stream import list_input_devices
+        devices = list_input_devices()
+        # Fixture: "Test Device 1" has 0 input channels, "Test Device 2" has 2.
+        names = [n for _i, n in devices]
+        assert "Test Device 2" in names
+        assert "Test Device 1" not in names
+
+    def test_find_input_device_honors_configured_name(self):
+        with patch('pyaudio.PyAudio') as mock:
+            inst = MagicMock()
+            mock.return_value = inst
+            info = MagicMock()
+            info.get.return_value = 3
+            inst.get_host_api_info_by_index.return_value = info
+            devs = [
+                {"maxInputChannels": 2, "name": "Built-in Mic"},
+                {"maxInputChannels": 2, "name": "Blue Yeti USB Microphone"},
+                {"maxInputChannels": 0, "name": "HDMI Output"},
+            ]
+            inst.get_device_info_by_index.side_effect = lambda i: devs[i]
+            with patch('xvoice2.config.INPUT_DEVICE_NAME', 'USB'):
+                stream = MicrophoneStream()
+                assert stream._find_input_device() is True
+                assert stream.device_index == 1  # matched the USB mic, not device 0
+
     def test_require_voiced_can_be_disabled(self):
         """With REQUIRE_VOICED off, an unvoiced-but-otherwise-valid clip passes."""
         with patch('pyaudio.PyAudio'):
