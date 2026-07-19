@@ -1,5 +1,7 @@
 # XVoice2
 
+**[Homepage and downloads →](https://tdoris.github.io/xvoice2/)**
+
 **Offline voice dictation for Linux and macOS.** Speak, and your words are typed
 into whatever application has focus: a terminal, an editor, a browser, or a
 remote desktop session. Runs a system-tray app with a friendly settings window,
