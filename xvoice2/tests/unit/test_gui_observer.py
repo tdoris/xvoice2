@@ -99,6 +99,51 @@ class TestGuiWiring:
         assert "Start dictation" in labels
 
 
+class TestOnboardingDialog:
+    def _dlg(self, **kw):
+        defaults = dict(wake_mode="session", wake_phrase="jimmy",
+                        sleep_phrase="stop jimmy", wake_prefix="computer",
+                        wake_enabled=True)
+        defaults.update(kw)
+        return gui.OnboardingDialog(gui._Bridge(), **defaults)
+
+    def test_session_flow_advances_through_all_steps(self, qapp):
+        dlg = self._dlg()
+        assert dlg._current_kind() == "arm"
+        dlg._on_state(True)                 # user said the wake phrase
+        assert dlg._current_kind() == "dictate"
+        dlg._on_transcribed("this is my first dictation")
+        assert dlg._current_kind() == "sleep"
+        dlg._on_state(False)                # user said the sleep phrase
+        assert dlg._current_kind() == "done"
+        assert dlg.finish_btn.isEnabled()
+
+    def test_prefix_flow_is_two_steps(self, qapp):
+        dlg = self._dlg(wake_mode="prefix")
+        assert dlg._current_kind() == "dictate"
+        dlg._on_transcribed("computer hello")
+        assert dlg._current_kind() == "done"
+
+    def test_no_wake_flow_is_two_steps(self, qapp):
+        dlg = self._dlg(wake_enabled=False)
+        assert dlg._current_kind() == "dictate"
+        dlg._on_transcribed("hello")
+        assert dlg._current_kind() == "done"
+
+    def test_wrong_event_does_not_advance(self, qapp):
+        dlg = self._dlg()
+        # On the "arm" step, a transcription (not an arm) must not advance.
+        dlg._on_transcribed("stray noise")
+        assert dlg._current_kind() == "arm"
+        # And pausing while waiting to arm must not advance either.
+        dlg._on_state(False)
+        assert dlg._current_kind() == "arm"
+
+    def test_uses_configured_wake_phrase_in_instructions(self, qapp):
+        dlg = self._dlg(wake_phrase="open sesame")
+        assert "open sesame" in dlg.instruction.text()
+
+
 class TestModelDownloadDialog:
     def test_completes_and_accepts(self, qapp):
         from PySide6.QtWidgets import QDialog

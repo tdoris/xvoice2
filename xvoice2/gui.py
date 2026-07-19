@@ -20,8 +20,8 @@ from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-    QDoubleSpinBox, QFormLayout, QLabel, QLineEdit, QMessageBox, QProgressBar,
-    QPushButton, QSystemTrayIcon, QMenu, QVBoxLayout,
+    QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QProgressBar, QPushButton, QSystemTrayIcon, QMenu, QTextEdit, QVBoxLayout,
 )
 
 from xvoice2 import config
@@ -301,6 +301,125 @@ class ModelDownloadDialog(QDialog):
             self.status.setText(f"Downloaded {mb} MB…")
 
 
+class OnboardingDialog(QDialog):
+    """First-run interactive tutorial that walks the user through one dictation.
+
+    Because dictation is injected into whatever window has focus, the tutorial's
+    focused text box receives the dictated words directly, so the user sees it
+    work. The dialog reacts to live state/transcription signals from the running
+    dictation loop to advance its steps.
+    """
+
+    def __init__(self, bridge, *, wake_mode, wake_phrase, sleep_phrase,
+                 wake_prefix, wake_enabled, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Welcome to XVoice2")
+        self.setModal(True)
+        self.setMinimumWidth(480)
+        self._mode = wake_mode
+        self._wake = wake_phrase
+        self._sleep = sleep_phrase
+        self._prefix = wake_prefix
+        self._wake_enabled = wake_enabled
+
+        self._steps = self._build_steps()
+        self._step = 0
+
+        layout = QVBoxLayout(self)
+
+        self.title = QLabel()
+        font = self.title.font()
+        font.setPointSize(font.pointSize() + 4)
+        font.setBold(True)
+        self.title.setFont(font)
+        layout.addWidget(self.title)
+
+        self.instruction = QLabel()
+        self.instruction.setWordWrap(True)
+        self.instruction.setMinimumHeight(64)
+        layout.addWidget(self.instruction)
+
+        self.textbox = QTextEdit()
+        self.textbox.setPlaceholderText("Your dictated text will appear here...")
+        self.textbox.setMinimumHeight(90)
+        layout.addWidget(self.textbox)
+
+        self.status = QLabel("Status: getting ready...")
+        self.status.setStyleSheet("color: gray;")
+        layout.addWidget(self.status)
+
+        buttons = QHBoxLayout()
+        self.skip_btn = QPushButton("Skip tutorial")
+        self.skip_btn.clicked.connect(self.accept)
+        self.finish_btn = QPushButton("Finish")
+        self.finish_btn.setEnabled(False)
+        self.finish_btn.clicked.connect(self.accept)
+        buttons.addWidget(self.skip_btn)
+        buttons.addStretch(1)
+        buttons.addWidget(self.finish_btn)
+        layout.addLayout(buttons)
+
+        bridge.state_changed.connect(self._on_state)
+        bridge.transcribed.connect(self._on_transcribed)
+
+        self._render()
+        self.textbox.setFocus()
+
+    def _build_steps(self):
+        """Ordered (kind, instruction) steps for the current wake configuration."""
+        steps = []
+        if self._wake_enabled and self._mode == "session":
+            steps.append(("arm",
+                "XVoice2 types whatever you say, but only after you turn dictation "
+                f"on.\n\nSay  “{self._wake}”  out loud now to start listening."))
+            steps.append(("dictate",
+                "You're listening. Now say a sentence, for example "
+                "“this is my first dictation”, and watch it appear in the box above."))
+            steps.append(("sleep",
+                f"Nicely done. To pause dictation, say  “{self._sleep}”."))
+        elif self._wake_enabled and self._mode == "prefix":
+            steps.append(("dictate",
+                "In prefix mode you say your prefix word before each phrase.\n\n"
+                f"Say  “{self._prefix} this is my first dictation”  and watch it appear above."))
+        else:
+            steps.append(("dictate",
+                "Dictation is always on. Say a sentence and watch it appear in the box above."))
+        steps.append(("done",
+            "That's it! XVoice2 lives in your system tray from now on. You can "
+            "change your wake words, microphone, and more in Settings.\n\nHappy dictating."))
+        return steps
+
+    def _current_kind(self):
+        return self._steps[self._step][0]
+
+    def _render(self):
+        _kind, text = self._steps[self._step]
+        self.instruction.setText(text)
+        self.title.setText(f"Welcome to XVoice2  ({self._step + 1}/{len(self._steps)})")
+        if self._current_kind() == "done":
+            self.finish_btn.setEnabled(True)
+            self.finish_btn.setDefault(True)
+            self.skip_btn.setText("Close")
+
+    def _advance(self):
+        if self._step < len(self._steps) - 1:
+            self._step += 1
+            self._render()
+            self.textbox.setFocus()  # keep injection landing in the box
+
+    def _on_state(self, armed):
+        self.status.setText("Status: listening" if armed else "Status: paused")
+        kind = self._current_kind()
+        if kind == "arm" and armed:
+            self._advance()
+        elif kind == "sleep" and not armed:
+            self._advance()
+
+    def _on_transcribed(self, _text):
+        if self._current_kind() == "dictate":
+            self._advance()
+
+
 class TrayApp:
     """The tray icon, its menu, and the wiring to the dictation controller."""
 
@@ -407,6 +526,20 @@ def main() -> int:
 
     tray = TrayApp(app)
     tray.start()
+
+    # First-run interactive tutorial: walk the user through one dictation.
+    if not settings.get("onboarding_completed"):
+        OnboardingDialog(
+            tray.bridge,
+            wake_mode=getattr(config, "WAKE_MODE", "session"),
+            wake_phrase=getattr(config, "WAKE_PHRASE", "start dictation"),
+            sleep_phrase=getattr(config, "SLEEP_PHRASE", "stop dictation"),
+            wake_prefix=getattr(config, "WAKE_PREFIX", "computer"),
+            wake_enabled=getattr(config, "WAKE_WORD_ENABLED", True),
+        ).exec()
+        settings["onboarding_completed"] = True
+        settings_store.save_settings(settings)
+
     return app.exec()
 
 

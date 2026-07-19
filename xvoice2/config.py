@@ -176,6 +176,7 @@ SLEEP_PHRASE = "stop dictation"  # Pauses dictation in session mode
 WAKE_PREFIX = "computer"  # Prefix word(s) before each phrase in prefix mode
 START_ARMED = False  # In session mode, begin already armed (skip the initial wake phrase)
 WAKE_NOTIFICATIONS = True  # Desktop notification on arm/pause state changes
+ONBOARDING_COMPLETED = False  # Set True after the first-run GUI tutorial is shown
 
 # Dictation mode settings
 DEFAULT_MODE = "general"  # Default dictation mode

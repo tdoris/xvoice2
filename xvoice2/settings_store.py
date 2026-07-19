@@ -32,6 +32,7 @@ SETTING_TO_CONFIG = {
     "append_trailing_space": "APPEND_TRAILING_SPACE",
     "silence_duration": "SILENCE_DURATION",
     "input_device_name": "INPUT_DEVICE_NAME",
+    "onboarding_completed": "ONBOARDING_COMPLETED",
 }
 
 
