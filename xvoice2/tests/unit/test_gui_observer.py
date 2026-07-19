@@ -92,3 +92,28 @@ class TestGuiWiring:
         assert "Settings…" in labels
         assert "Quit" in labels
         assert "Start dictation" in labels
+
+
+class TestModelDownloadDialog:
+    def test_completes_and_accepts(self, qapp):
+        from PySide6.QtWidgets import QDialog
+        with patch("xvoice2.model_download.model_total_bytes", return_value=1000), \
+             patch("xvoice2.model_download.download_model") as dl, \
+             patch("xvoice2.model_download.cache_bytes_on_disk", return_value=1000):
+            dlg = gui.ModelDownloadDialog("nemo-parakeet-tdt-0.6b-v2")
+            dlg._thread.join(timeout=3)
+            dlg._tick()  # sees _done, no error -> accept
+            assert dlg.result() == QDialog.Accepted
+            dl.assert_called_once()
+
+    def test_reports_error_and_rejects(self, qapp):
+        from PySide6.QtWidgets import QDialog
+        with patch("xvoice2.model_download.model_total_bytes", return_value=0), \
+             patch("xvoice2.model_download.download_model",
+                   side_effect=RuntimeError("no network")), \
+             patch("xvoice2.model_download.cache_bytes_on_disk", return_value=0), \
+             patch.object(gui.QMessageBox, "critical", return_value=None):
+            dlg = gui.ModelDownloadDialog("nemo-parakeet-tdt-0.6b-v2")
+            dlg._thread.join(timeout=3)
+            dlg._tick()  # sees _done + error -> reject
+            assert dlg.result() == QDialog.Rejected

@@ -16,14 +16,16 @@ import sys
 import threading
 from typing import Optional
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
-    QLabel, QLineEdit, QMessageBox, QSystemTrayIcon, QMenu, QVBoxLayout,
+    QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QSystemTrayIcon,
+    QMenu, QVBoxLayout,
 )
 
 from xvoice2 import config
+from xvoice2 import model_download
 from xvoice2 import settings_store
 from xvoice2.main import VoiceDictationApp
 
@@ -190,6 +192,81 @@ class SettingsDialog(QDialog):
         }
 
 
+class ModelDownloadDialog(QDialog):
+    """First-run modal that downloads the Parakeet model with progress.
+
+    The download runs in a daemon thread; a timer polls the growing cache to
+    update the bar. Falls back to an indeterminate bar if the total size can't
+    be fetched (e.g. brief offline metadata failure).
+    """
+
+    def __init__(self, model_name: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("XVoice2 — First-time setup")
+        self.setModal(True)
+        self.model_name = model_name
+        self._total = model_download.model_total_bytes(model_name)
+        self._error = None
+        self._done = False
+
+        layout = QVBoxLayout(self)
+        size_txt = f"~{self._total / 1024**3:.1f} GB" if self._total else "~2.4 GB"
+        info = QLabel(
+            f"XVoice2 needs to download the speech recognition model "
+            f"(Parakeet, {size_txt}).\nThis is a one-time download and may take "
+            f"a few minutes depending on your connection.")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        self.bar = QProgressBar()
+        self.bar.setRange(0, 100) if self._total else self.bar.setRange(0, 0)
+        layout.addWidget(self.bar)
+
+        self.status = QLabel("Starting download…")
+        layout.addWidget(self.status)
+
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.reject)
+        layout.addWidget(self.cancel_btn)
+
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="xvoice2-model-download")
+        self._thread.start()
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(500)
+
+    def _run(self) -> None:
+        try:
+            model_download.download_model(self.model_name)
+        except Exception as e:  # noqa: BLE001 - surfaced to the user in _tick
+            self._error = e
+        finally:
+            self._done = True
+
+    def _tick(self) -> None:
+        if self._done:
+            self._timer.stop()
+            if self._error is not None:
+                QMessageBox.critical(
+                    self, "Download failed",
+                    f"Could not download the speech model:\n{self._error}\n\n"
+                    f"Check your internet connection and try again.")
+                self.reject()
+            else:
+                self.bar.setRange(0, 100)
+                self.bar.setValue(100)
+                self.accept()
+            return
+        got = model_download.cache_bytes_on_disk(self.model_name)
+        mb = got // (1024 * 1024)
+        if self._total:
+            self.bar.setValue(min(99, int(got / self._total * 100)))
+            self.status.setText(f"Downloaded {mb} / {self._total // (1024 * 1024)} MB")
+        else:
+            self.status.setText(f"Downloaded {mb} MB…")
+
+
 class TrayApp:
     """The tray icon, its menu, and the wiring to the dictation controller."""
 
@@ -284,6 +361,15 @@ def main() -> int:
         QMessageBox.critical(None, "XVoice2",
                              "No system tray is available on this desktop.")
         return 1
+
+    # First run: make sure the Parakeet model is downloaded before starting,
+    # with a visible progress dialog instead of a silent multi-minute stall.
+    engine = getattr(config, "TRANSCRIPTION_ENGINE", "parakeet")
+    if engine == "parakeet":
+        model = getattr(config, "PARAKEET_MODEL", "nemo-parakeet-tdt-0.6b-v2")
+        if not model_download.is_model_cached(model):
+            if ModelDownloadDialog(model).exec() != QDialog.Accepted:
+                return 1  # download cancelled or failed
 
     tray = TrayApp(app)
     tray.start()
