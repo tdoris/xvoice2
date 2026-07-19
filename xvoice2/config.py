@@ -57,10 +57,41 @@ SILENCE_THRESHOLD = 1000  # Silence threshold on the int16 amplitude scale (fall
 SILENCE_DURATION = 1.0  # Duration of silence to trigger end of speech in seconds
 THRESHOLD_ADJUSTMENT_FACTOR = 1.0  # Multiplier for auto-calibrated threshold (>1 = less sensitive, <1 = more sensitive)
 CALIBRATION_ENABLED = True  # Whether to use auto-calibration for silence detection
+# --- Non-speech clip rejection (VAD gating) ---
+# These decide whether a captured clip is real speech BEFORE it is sent to
+# Whisper. Whisper hallucinates stock phrases ("thank you") on near-silent
+# clips, so a stricter gate here is the cheapest way to cut those down.
+# Tighten to reduce hallucinations; loosen if genuine short/quiet utterances
+# (including the wake word) get rejected. Watch the "Rejected/Accepted ... clip"
+# debug lines to see which criterion is firing when you tune.
+#
 # Minimum fraction of frames that must cross the threshold for a captured clip
 # to count as real speech (rejects stray clicks/pops without discarding genuine
 # utterances that contain gaps/trailing silence). Lower = more permissive.
 MIN_VOICE_ACTIVITY_RATIO = 0.10
+# Minimum seconds of ACTUAL voiced audio (active_ratio x clip length). A brief
+# blip in a sea of silence has a high ratio over a short window but very little
+# real voiced audio, so this catches the clips Whisper turns into "thank you".
+MIN_SPEECH_DURATION = 0.25
+# The clip's peak amplitude must exceed the silence threshold by at least this
+# factor. Rejects quiet ambient noise that barely crosses the threshold. Raise
+# toward 1.5 if quiet room noise still triggers; lower toward 1.0 if a soft
+# speaker gets cut off.
+SPEECH_MARGIN_FACTOR = 1.2
+# Require sustained VOICED audio (vowels) in a clip. This is what separates
+# speech from keyboard clicks and other impulsive noise: voiced speech has a low
+# zero-crossing rate (ZCR), while key clicks are broadband transients with a
+# high ZCR. Keyboard clatter is loud and long enough to pass the gates above but
+# contains almost no voiced audio, so this is the key defense against spurious
+# transcriptions while you type. Disable (set False) if you dictate in a whisper
+# (whispered speech is unvoiced) or this rejects genuine speech.
+REQUIRE_VOICED = True
+# A frame counts as "voiced" if its zero-crossing rate is below this. Voiced
+# speech typically sits around 0.02-0.10; key clicks / fricatives run higher.
+MAX_VOICED_ZCR = 0.20
+# Minimum seconds of voiced audio for a clip to count as speech. A real word has
+# at least one vowel (well over this); keyboard clatter has ~none.
+MIN_VOICED_DURATION = 0.12
 
 # Text injection settings
 TYPING_DELAY = 0  # Delay between characters in milliseconds (0 for no delay)
@@ -86,6 +117,47 @@ OLLAMA_URL = "http://localhost:11434/api/generate"  # Ollama API URL
 
 # Performance settings
 USE_PERSISTENT_WHISPER = False  # Keep whisper.cpp loaded for faster transcription
+
+# Whisper hallucination filtering
+#
+# On (near-)silent or non-speech audio, Whisper reliably emits stock phrases
+# from its training data (it was trained heavily on video captions): "thank
+# you", "thanks for watching", "you", etc. With an always-on mic these get typed
+# during pauses while dictation is armed. When enabled, any utterance whose
+# ENTIRE text (after normalization) matches one of these phrases is dropped.
+# Only whole-utterance matches are filtered, so "thank you for the help" is still
+# typed normally. Edit HALLUCINATION_PHRASES to taste.
+FILTER_HALLUCINATIONS = True
+HALLUCINATION_PHRASES = [
+    "thank you",
+    "thank you very much",
+    "thanks for watching",
+    "thanks for watching!",
+    "thank you for watching",
+    "thanks",
+    "you",
+    "bye",
+    "please subscribe",
+    "subscribe",
+]
+
+# Wake-word activation settings
+#
+# XVoice2 keeps the mic always on. Wake-word gating stops it from typing
+# everything you say: text is only injected while dictation is "armed". This
+# also means there is NO global hotkey, which is exactly what makes XVoice2
+# usable over remote desktop sessions (RDP/VNC) where a client would otherwise
+# swallow the hotkey. See wake_word.py for details.
+WAKE_WORD_ENABLED = True  # Gate dictation behind a wake word (set False for the old always-typing behavior)
+# Interaction model:
+#   "session" = say WAKE_PHRASE to start typing, SLEEP_PHRASE to pause.
+#   "prefix"  = say WAKE_PREFIX immediately before each phrase you want typed.
+WAKE_MODE = "session"
+WAKE_PHRASE = "start dictation"  # Arms dictation in session mode
+SLEEP_PHRASE = "stop dictation"  # Pauses dictation in session mode
+WAKE_PREFIX = "computer"  # Prefix word(s) before each phrase in prefix mode
+START_ARMED = False  # In session mode, begin already armed (skip the initial wake phrase)
+WAKE_NOTIFICATIONS = True  # Desktop notification on arm/pause state changes
 
 # Dictation mode settings
 DEFAULT_MODE = "general"  # Default dictation mode

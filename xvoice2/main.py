@@ -17,11 +17,13 @@ import datetime
 from typing import NoReturn
 
 from xvoice2 import config
+from xvoice2 import notifier
 from xvoice2.logging_util import debug_log
 from xvoice2.mic_stream import MicrophoneStream
 from xvoice2.transcriber import Transcriber
 from xvoice2.text_injector import TextInjector
 from xvoice2.formatter import TextFormatter
+from xvoice2.wake_word import WakeWordController
 
 class VoiceDictationApp:
     """Main voice dictation application class."""
@@ -42,6 +44,12 @@ class VoiceDictationApp:
         self.text_injector = TextInjector()
         self.text_injector.set_mode(mode)  # Pass the mode to the text injector
         self.formatter = TextFormatter()
+
+        # Wake-word activation gate. When enabled the mic stays always-on but
+        # text is only injected while dictation is armed (see wake_word.py).
+        self.wake_enabled = getattr(config, "WAKE_WORD_ENABLED", True)
+        self.wake = WakeWordController() if self.wake_enabled else None
+        self.notify_state = getattr(config, "WAKE_NOTIFICATIONS", True)
         
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -128,7 +136,10 @@ class VoiceDictationApp:
             
         debug_log(f"Starting voice dictation in '{self.mode}' mode...")
         debug_log("Speak into your microphone. Press Ctrl+C to exit.")
-        
+
+        if self.wake is not None:
+            self._print_wake_banner()
+
         self.running = True
         
         try:
@@ -195,7 +206,23 @@ class VoiceDictationApp:
             
         print(f" Done")
         debug_log(f"Raw transcription from Whisper: '{transcription}'")
-        
+
+        # Step 1b: Wake-word gate. The mic is always on, but we only inject text
+        # while dictation is armed. Control phrases (wake/sleep) are matched on
+        # the raw transcript and are never themselves typed.
+        if self.wake is not None:
+            result = self.wake.evaluate(transcription)
+            if result.state_changed:
+                self._announce_state(result.armed)
+            if not result.should_inject:
+                debug_log(
+                    f"Wake gate: not injecting (state={self.wake.status()}). "
+                    f"Heard: '{transcription}'"
+                )
+                return
+            # In prefix mode the prefix word has been stripped off.
+            transcription = result.text
+
         # Step 2: Format the text if either LLM option is enabled
         if config.USE_LLM or config.USE_LOCAL_LLM:
             llm_type = "Ollama" if config.USE_LOCAL_LLM else "OpenAI"
@@ -224,6 +251,39 @@ class VoiceDictationApp:
         success = self.text_injector.inject_text(formatted_text)
         print(" Done" if success else " Failed")
         debug_log(f"Final text injected: '{formatted_text}'")
+
+    def _print_wake_banner(self) -> None:
+        """Print (and notify) the wake-word gate's current state at startup."""
+        if self.wake.mode == "prefix":
+            print(
+                f"Wake word ON (prefix mode): say '{config.WAKE_PREFIX} ...' "
+                f"before each phrase you want typed."
+            )
+        else:
+            print(
+                f"Wake word ON (session mode): say '{config.WAKE_PHRASE}' to start "
+                f"typing, '{config.SLEEP_PHRASE}' to pause."
+            )
+            print(f"Initial state: {self.wake.status()}")
+            if self.notify_state:
+                self._announce_state(self.wake.armed)
+
+    def _announce_state(self, armed: bool) -> None:
+        """Announce an armed/paused state change on the terminal and via desktop
+        notification.
+
+        Args:
+            armed: The new armed state.
+        """
+        state = "ARMED" if armed else "SLEEPING"
+        debug_log(f"Wake state -> {state}")
+        print(f"[{state}] " + ("Dictation on — start speaking." if armed
+                               else "Dictation paused."))
+        if self.notify_state:
+            if armed:
+                notifier.notify("XVoice2", "🎤 Listening — dictation on")
+            else:
+                notifier.notify("XVoice2", "😴 Dictation paused")
 
     def _confirm_command(self, command: str) -> bool:
         """
@@ -299,6 +359,24 @@ def main():
         "--use-whisper-api",
         action="store_true",
         help="Use OpenAI Whisper API for transcription instead of local whisper.cpp"
+    )
+
+    parser.add_argument(
+        "--no-wake-word",
+        action="store_true",
+        help="Disable wake-word gating and type everything heard (old always-on behavior)"
+    )
+
+    parser.add_argument(
+        "--wake-mode",
+        choices=["session", "prefix"],
+        help=f"Wake-word interaction model (default: {config.WAKE_MODE})"
+    )
+
+    parser.add_argument(
+        "--start-armed",
+        action="store_true",
+        help="In session mode, begin already armed (skip saying the wake phrase first)"
     )
     
     parser.add_argument(
@@ -383,6 +461,15 @@ def main():
         else:
             print("Warning: OpenAI API key not found. Set OPENAI_API_KEY environment variable or update config_local.py")
         
+    # Wake-word configuration
+    if args.no_wake_word:
+        config.WAKE_WORD_ENABLED = False
+        print("Wake word disabled: everything heard will be typed.")
+    if args.wake_mode:
+        config.WAKE_MODE = args.wake_mode
+    if args.start_armed:
+        config.START_ARMED = True
+
     # If we're in command mode, print a note about command execution
     if args.mode == "command":
         execution_status = "enabled" if config.EXECUTE_COMMANDS else "disabled"

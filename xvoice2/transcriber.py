@@ -36,7 +36,43 @@ def clean_transcription(raw_text: str) -> str:
     clean_text = re.sub(r'\[BLANK_AUDIO\]', '', clean_text)
     # Collapse repeated whitespace and trim
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+
+    # Drop whole-utterance Whisper hallucinations (e.g. "thank you" on silence).
+    if is_hallucination(clean_text):
+        debug_log(f"Dropping likely Whisper hallucination: '{clean_text}'")
+        return ""
+
     return clean_text
+
+
+def _normalize_for_match(text: str) -> str:
+    """Lowercase, strip punctuation, and collapse whitespace for phrase matching."""
+    if not text:
+        return ""
+    cleaned = re.sub(r'[^\w\s]', ' ', text.lower())
+    return re.sub(r'\s+', ' ', cleaned).strip()
+
+
+def is_hallucination(text: str) -> bool:
+    """Return True if the entire text is a known Whisper hallucination phrase.
+
+    Whisper emits stock caption phrases ("thank you", "thanks for watching", ...)
+    on (near-)silent audio. Only whole-utterance matches count, so a phrase used
+    inside a longer sentence is preserved.
+
+    Args:
+        text: Cleaned transcription text.
+
+    Returns:
+        True if the normalized text exactly matches a configured phrase.
+    """
+    if not getattr(config, 'FILTER_HALLUCINATIONS', True):
+        return False
+    norm = _normalize_for_match(text)
+    if not norm:
+        return False
+    phrases = {_normalize_for_match(p) for p in getattr(config, 'HALLUCINATION_PHRASES', [])}
+    return norm in phrases
 
 class WhisperServerProcess:
     """Manages a persistent Whisper.cpp server process for faster transcription."""
@@ -588,8 +624,9 @@ class Transcriber:
             if not transcription:
                 print("API returned empty transcription")
                 return None
-                
-            return transcription
+
+            # Apply the same cleaning/hallucination filtering as the local paths.
+            return clean_transcription(transcription)
             
         except Exception as e:
             print(f"Error calling Whisper API: {e}")

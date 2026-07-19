@@ -106,6 +106,113 @@ class TestMicrophoneStream:
             ratio = stream._voice_activity_ratio(clip, threshold)
             assert ratio < 0.10
 
+    def test_rejection_reason_accepts_genuine_speech(self):
+        """A clip with ample loud, voiced audio is accepted (reason is None)."""
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            reason = stream._rejection_reason(
+                duration=2.0, active_ratio=0.6, max_amplitude=6000, threshold=500)
+            assert reason is None
+
+    def test_rejection_reason_rejects_too_short(self):
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            reason = stream._rejection_reason(
+                duration=0.2, active_ratio=0.9, max_amplitude=6000, threshold=500)
+            assert reason is not None and "too short" in reason
+
+    def test_rejection_reason_rejects_low_activity(self):
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            reason = stream._rejection_reason(
+                duration=2.0, active_ratio=0.02, max_amplitude=6000, threshold=500)
+            assert reason is not None and "activity ratio" in reason
+
+    def test_rejection_reason_rejects_insufficient_active_audio(self):
+        """A brief blip: high ratio over a short window but little real speech.
+
+        This is the "thank you" hallucination case — passes the ratio and
+        duration floors but has too little actual active audio.
+        """
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            # 0.5s clip, 20% active -> only 0.1s active, below the 0.25s floor.
+            reason = stream._rejection_reason(
+                duration=0.5, active_ratio=0.2, max_amplitude=6000, threshold=500)
+            assert reason is not None and "active audio" in reason
+
+    def test_rejection_reason_rejects_too_quiet(self):
+        """A clip that barely crosses the threshold is rejected as ambient noise."""
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            # max_amp only 1.05x threshold, below the 1.2x margin.
+            reason = stream._rejection_reason(
+                duration=2.0, active_ratio=0.6, max_amplitude=525, threshold=500)
+            assert reason is not None and "too quiet" in reason
+
+    def test_rejection_reason_respects_config(self):
+        """Loosening the config accepts a clip the defaults would reject."""
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            args = dict(duration=0.5, active_ratio=0.2, max_amplitude=525, threshold=500)
+            # Defaults reject (insufficient active audio / too quiet)...
+            assert stream._rejection_reason(**args) is not None
+            # ...but a permissive config accepts it.
+            with patch('xvoice2.config.MIN_SPEECH_DURATION', 0.05), \
+                 patch('xvoice2.config.SPEECH_MARGIN_FACTOR', 1.0):
+                assert stream._rejection_reason(**args) is None
+
+    def test_voiced_seconds_detects_vowel_like_tone(self):
+        """A low-frequency tone (like a vowel) has a low ZCR and counts as voiced."""
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            stream.chunk_size = 1024
+            stream.sample_rate = 16000
+            t = np.arange(16000)  # 1 second
+            tone = (8000 * np.sin(2 * np.pi * 150 * t / 16000)).astype(np.int16)
+            voiced = stream._voiced_seconds(tone, threshold=500)
+            assert voiced > 0.8  # nearly the whole second is voiced
+
+    def test_voiced_seconds_rejects_keyboard_like_noise(self):
+        """A loud broadband/high-ZCR signal (like key clicks) is not voiced."""
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            stream.chunk_size = 1024
+            stream.sample_rate = 16000
+            # Alternating sign every sample -> maximal ZCR: loud but not voiced.
+            noise = np.zeros(16000, dtype=np.int16)
+            noise[::2] = 8000
+            noise[1::2] = -8000
+            voiced = stream._voiced_seconds(noise, threshold=500)
+            assert voiced < 0.05
+
+    def test_rejection_reason_rejects_unvoiced_keyboard_clatter(self):
+        """Loud, long, active audio with ~no voiced content is rejected."""
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            reason = stream._rejection_reason(
+                duration=2.0, active_ratio=0.6, max_amplitude=8000, threshold=500,
+                voiced_seconds=0.03)
+            assert reason is not None and "voiced" in reason
+
+    def test_rejection_reason_accepts_voiced_speech(self):
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            reason = stream._rejection_reason(
+                duration=2.0, active_ratio=0.6, max_amplitude=8000, threshold=500,
+                voiced_seconds=0.8)
+            assert reason is None
+
+    def test_require_voiced_can_be_disabled(self):
+        """With REQUIRE_VOICED off, an unvoiced-but-otherwise-valid clip passes."""
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            args = dict(duration=2.0, active_ratio=0.6, max_amplitude=8000,
+                        threshold=500, voiced_seconds=0.0)
+            assert stream._rejection_reason(**args) is not None
+            with patch('xvoice2.config.REQUIRE_VOICED', False):
+                assert stream._rejection_reason(**args) is None
+
     def test_effective_threshold_falls_back_when_uncalibrated(self):
         """effective_threshold() returns the static threshold when uncalibrated."""
         with patch('pyaudio.PyAudio'):

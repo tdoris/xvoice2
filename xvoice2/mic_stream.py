@@ -206,6 +206,92 @@ class MicrophoneStream:
         )
         return float(np.mean(frame_peaks > threshold))
 
+    def _rejection_reason(
+        self,
+        duration: float,
+        active_ratio: float,
+        max_amplitude: float,
+        threshold: float,
+        voiced_seconds: Optional[float] = None,
+    ) -> Optional[str]:
+        """Decide whether a captured clip should be rejected as non-speech.
+
+        Returns a short human-readable reason to reject the clip, or None if it
+        looks like genuine speech. Keeping this pure (no I/O) makes the VAD gate
+        unit-testable and easy to tune via config.
+
+        Args:
+            duration: Clip length in seconds.
+            active_ratio: Fraction of frames whose peak crosses the threshold.
+            max_amplitude: Peak absolute amplitude in the clip.
+            threshold: The silence threshold in effect.
+            voiced_seconds: Seconds of voiced audio (see _voiced_seconds). When
+                provided and REQUIRE_VOICED is set, a clip with too little voiced
+                audio (e.g. keyboard clatter) is rejected.
+
+        Returns:
+            A rejection reason string, or None to accept the clip.
+        """
+        min_active_ratio = getattr(config, 'MIN_VOICE_ACTIVITY_RATIO', 0.10)
+        min_speech_duration = getattr(config, 'MIN_SPEECH_DURATION', 0.25)
+        speech_margin = getattr(config, 'SPEECH_MARGIN_FACTOR', 1.2)
+        # "Active seconds" approximates voiced content by amplitude alone; the
+        # ZCR-based voiced_seconds below is the stronger, keyboard-aware check.
+        active_seconds = active_ratio * duration
+
+        if duration < 0.3:
+            return f"too short ({duration:.2f}s < 0.30s)"
+        if active_ratio < min_active_ratio:
+            return f"low activity ratio ({active_ratio:.2f} < {min_active_ratio:.2f})"
+        if active_seconds < min_speech_duration:
+            return f"insufficient active audio ({active_seconds:.2f}s < {min_speech_duration:.2f}s)"
+        if threshold > 0 and max_amplitude < threshold * speech_margin:
+            return (f"too quiet (max_amp {max_amplitude:.0f} < "
+                    f"{speech_margin:.1f}x threshold {threshold:.0f})")
+        if (getattr(config, 'REQUIRE_VOICED', True) and voiced_seconds is not None):
+            min_voiced = getattr(config, 'MIN_VOICED_DURATION', 0.12)
+            if voiced_seconds < min_voiced:
+                return (f"no sustained voiced speech (voiced={voiced_seconds:.2f}s < "
+                        f"{min_voiced:.2f}s) — likely keyboard/noise")
+        return None
+
+    def _voiced_seconds(self, audio_array: np.ndarray, threshold: float) -> float:
+        """
+        Estimate the seconds of loud, *voiced* audio in a clip.
+
+        A frame counts if it is both active (peak crosses the threshold) and
+        voiced (zero-crossing rate below MAX_VOICED_ZCR). Voiced speech (vowels)
+        has a low ZCR; keyboard clicks and other impulsive noise are broadband
+        transients with a high ZCR. Requiring a minimum amount of voiced audio is
+        therefore what distinguishes a spoken phrase from keyboard clatter that
+        is otherwise loud and long enough to pass the amplitude-based gates.
+
+        Args:
+            audio_array: int16 samples of the captured clip.
+            threshold: Amplitude threshold for an "active" frame.
+
+        Returns:
+            Estimated seconds of voiced audio.
+        """
+        frame_len = self.chunk_size
+        n_frames = len(audio_array) // frame_len
+        if n_frames == 0:
+            return 0.0
+
+        frames = audio_array[:n_frames * frame_len].reshape(n_frames, frame_len).astype(np.float64)
+        peaks = np.max(np.abs(frames), axis=1)
+
+        # Zero-crossing rate per frame: fraction of adjacent sample pairs that
+        # change sign. Silence (all zeros) yields 0, so it never counts as voiced
+        # and is correctly excluded by the amplitude test below anyway.
+        signs = np.sign(frames)
+        zcr = np.mean(np.diff(signs, axis=1) != 0, axis=1)
+
+        max_zcr = getattr(config, 'MAX_VOICED_ZCR', 0.20)
+        voiced_frames = int(np.sum((peaks > threshold) & (zcr < max_zcr)))
+        frame_duration = frame_len / float(self.sample_rate)
+        return voiced_frames * frame_duration
+
     def is_silent(self, data_array: np.ndarray) -> bool:
         """
         Determine if the audio chunk is silent.
@@ -495,21 +581,30 @@ class MicrophoneStream:
                                 # threshold while still being genuine speech).
                                 threshold = self.effective_threshold()
                                 active_ratio = self._voice_activity_ratio(audio_array, threshold)
+                                voiced_seconds = self._voiced_seconds(audio_array, threshold)
 
-                                # False positive detection: discard only clips that
-                                # are too short to be speech, or that contain almost
-                                # no above-threshold frames (a stray click/pop in a
-                                # sea of silence).
-                                min_active_ratio = getattr(config, 'MIN_VOICE_ACTIVITY_RATIO', 0.10)
-                                if duration < 0.3 or active_ratio < min_active_ratio:
-                                    debug_log(f"Possible false trigger: duration={duration:.2f}s, active_ratio={active_ratio:.2f}, avg_amp={avg_amplitude:.1f}, max_amp={max_amplitude:.1f}, threshold={threshold:.1f}")
+                                # False positive detection: discard clips that
+                                # don't look like genuine speech (too short, too
+                                # little active/voiced audio, or too quiet). The
+                                # voiced-audio check is the main defense against
+                                # keyboard clicks being transcribed while typing.
+                                # Tunable via config.
+                                reason = self._rejection_reason(
+                                    duration, active_ratio, max_amplitude, threshold, voiced_seconds)
+                                if reason:
+                                    debug_log(f"Rejected non-speech clip: {reason} "
+                                              f"[duration={duration:.2f}s, active_ratio={active_ratio:.2f}, "
+                                              f"voiced={voiced_seconds:.2f}s, avg_amp={avg_amplitude:.1f}, "
+                                              f"max_amp={max_amplitude:.1f}, threshold={threshold:.1f}]")
                                     false_trigger_count += 1
                                     self.recalibrate_if_needed(false_trigger_count)
                                     os.remove(file_path)  # Clean up the audio file
                                     continue
 
                                 # Log actual speech characteristics for debugging
-                                debug_log(f"Speech audio metrics: duration={duration:.2f}s, active_ratio={active_ratio:.2f}, avg_amp={avg_amplitude:.1f}, max_amp={max_amplitude:.1f}, threshold={threshold:.1f}")
+                                debug_log(f"Accepted speech clip: duration={duration:.2f}s, active_ratio={active_ratio:.2f}, "
+                                          f"voiced={voiced_seconds:.2f}s, avg_amp={avg_amplitude:.1f}, "
+                                          f"max_amp={max_amplitude:.1f}, threshold={threshold:.1f}")
                         except Exception as e:
                             debug_log(f"Error checking audio: {e}")
                     

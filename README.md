@@ -7,6 +7,7 @@ A cross-platform voice dictation application that captures microphone input, tra
 - Real-time microphone input capture using PortAudio
 - Speech-to-text transcription using whisper.cpp
 - Text injection into the active application (using wtype on Linux, AppleScript on macOS)
+- Always-on microphone with **wake-word activation** — no hotkey to press, so it works over remote desktop (RDP/VNC) sessions where a hotkey would be captured by the client
 - Optional grammar and punctuation correction using LLM (supports both OpenAI API and local Ollama models)
 - Modular architecture for easy extensions
 
@@ -177,6 +178,42 @@ You can also run it as a Python module if you prefer:
 ```bash
 python -m xvoice2 --help
 ```
+
+## Wake word activation
+
+XVoice2 keeps the microphone **always on** — there is no push-to-talk key. To
+avoid typing everything it hears, dictation is gated behind a spoken wake word
+(enabled by default). Because nothing depends on a global hotkey, this also
+works cleanly inside **remote desktop sessions**: your local mic is captured and
+transcribed on your machine, and the text is injected into whatever window has
+focus — including an RDP/VNC client, so it lands in the remote session.
+
+Two interaction models (`WAKE_MODE` in `config.py`, or `--wake-mode`):
+
+- **`session`** (default) — say the wake phrase to start typing, the sleep
+  phrase to pause. Everything in between is typed. Best for continuous
+  dictation or coding.
+- **`prefix`** — say a short prefix word immediately before each phrase you want
+  typed. No persistent state.
+
+```bash
+# Session mode (default): say "start dictation" ... then "stop dictation"
+xvoice2
+
+# Begin already armed (skip saying the wake phrase first)
+xvoice2 --start-armed
+
+# Prefix mode: say "computer <your text>" for each phrase
+xvoice2 --wake-mode prefix
+
+# Disable gating entirely and type everything heard (original behavior)
+xvoice2 --no-wake-word
+```
+
+State changes are shown in the terminal and as desktop notifications. The
+phrases (`WAKE_PHRASE`, `SLEEP_PHRASE`, `WAKE_PREFIX`) and toggles
+(`WAKE_WORD_ENABLED`, `START_ARMED`, `WAKE_NOTIFICATIONS`) are configurable in
+`config.py` / `config_local.py`.
 
 ## Project Structure
 
