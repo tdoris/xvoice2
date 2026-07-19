@@ -2,6 +2,25 @@
 
 This document outlines potential features and enhancements planned for future releases of XVoice 2.0. These are based on anticipated user needs and technical possibilities.
 
+## Completed
+
+- ✅ **System-tray GUI** (PySide6) with a settings window and status icon —
+  makes XVoice2 usable without the terminal.
+- ✅ **AppImage packaging** with a first-run model-download screen — double-click
+  install for non-technical users.
+- ✅ **NVIDIA Parakeet engine** (local, ONNX Runtime) — high accuracy with inline
+  punctuation and capitalization, no external LLM needed for basic formatting.
+- ✅ **Auto-punctuation** — provided natively by Parakeet (no LLM required).
+- ✅ **Wake-word activation** (session + prefix modes), replacing hotkeys with a
+  fully hands-free model that also works over remote desktop (RDP/VNC).
+- ✅ **Configurable wake/sleep phrases** — editable in the GUI Settings.
+- ✅ **Microphone selection** in Settings (e.g. choose a USB mic).
+- ✅ **Latency reduction** — model pre-warm at startup + tunable end-of-speech
+  pause.
+- ✅ **Non-speech rejection** — voicing/ZCR-based VAD plus a Whisper
+  hallucination filter, so keyboard clicks and silence aren't transcribed.
+- ✅ **Multilingual option** — Parakeet `nemo-parakeet-tdt-0.6b-v3` (~25 languages).
+
 ## High Priority Features
 
 ### Voice Commands Mode
@@ -14,9 +33,11 @@ This document outlines potential features and enhancements planned for future re
 - **Implementation**: Add command-line flag and runtime toggle via keyboard shortcut
 - **Benefit**: Provides flexibility for different usage scenarios (meetings vs. dictation)
 
-### Custom Hotkeys
+### Custom Hotkeys — superseded
 - **Description**: User-configurable keyboard shortcuts to start/stop recording and control other functions
-- **Implementation**: Add a hotkey configuration section to config.py and integrate with system hotkey management
+- **Note**: Largely superseded by the hands-free **wake-word** model (which also
+  works over remote desktop, where a global hotkey would be captured by the
+  client). A hotkey could still be offered as an optional trigger.
 - **Benefit**: Improves user experience with personalized control scheme
 
 ### Transcription History
@@ -31,9 +52,10 @@ This document outlines potential features and enhancements planned for future re
 - **Implementation**: Domain-specific prompt templates and vocabulary enhancements for LLM formatting
 - **Benefit**: Improves accuracy for specialized terminology and formatting conventions
 
-### UI/GUI Interface
+### UI/GUI Interface — ✅ done
 - **Description**: Simple graphical interface showing recording status, history, and settings
-- **Implementation**: Create lightweight system tray application using PyQt or similar
+- **Implementation**: Delivered as a PySide6 system-tray app (`xvoice2-gui`) with a
+  settings window. History view is still open.
 - **Benefit**: Makes the application more accessible to non-technical users
 
 ### End-to-End Encryption
@@ -73,9 +95,10 @@ This document outlines potential features and enhancements planned for future re
 - **Implementation**: Add preview window showing before/after text with accept/reject options
 - **Benefit**: Gives users control over automated formatting
 
-### Auto-Punctuation
+### Auto-Punctuation — ✅ done
 - **Description**: Improve punctuation insertion without relying on external LLM services
-- **Implementation**: Create lightweight punctuation prediction model that runs locally
+- **Implementation**: Provided natively by the Parakeet engine, which outputs
+  punctuated, capitalized text locally with no LLM.
 - **Benefit**: Faster punctuation with lower resource usage
 
 ### Speaker Identification

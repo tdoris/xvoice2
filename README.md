@@ -1,307 +1,221 @@
 # XVoice2
 
-A cross-platform voice dictation application that captures microphone input, transcribes speech to text, and injects the text into the active application. Supports both Linux and macOS.
+**Offline voice dictation for Linux and macOS.** Speak, and your words are typed
+into whatever application has focus — a terminal, an editor, a browser, or a
+remote desktop session. Runs a system-tray app with a friendly settings window,
+or a headless CLI. All transcription happens locally; nothing is sent to the
+cloud by default.
 
-## Features
+XVoice2 grew out of a tool for people who can't easily type. It keeps that
+spirit: **fully hands-free** — the microphone is always on and dictation is
+gated behind a spoken **wake word**, so there is no key to press.
 
-- Real-time microphone input capture using PortAudio
-- Speech-to-text transcription using whisper.cpp, or optionally **NVIDIA Parakeet** (local, via onnx-asr) for higher accuracy, inline punctuation, and far fewer silence hallucinations
-- Text injection into the active application (using wtype on Linux, AppleScript on macOS)
-- Always-on microphone with **wake-word activation** — no hotkey to press, so it works over remote desktop (RDP/VNC) sessions where a hotkey would be captured by the client
-- Optional grammar and punctuation correction using LLM (supports both OpenAI API and local Ollama models)
-- Modular architecture for easy extensions
+## Highlights
 
-## Requirements
+- 🎙️ **Always-on mic with a configurable wake word** — say your wake phrase to
+  start, your sleep phrase to pause. No hotkey.
+- 🖥️ **Works over remote desktop (RDP/VNC)** — because there's no global hotkey
+  to be swallowed by the client, and text is injected into the focused window.
+- 🧠 **NVIDIA Parakeet transcription** (local, via ONNX Runtime) — accurate,
+  punctuated, capitalized text, and no "thank you"-style hallucinations on
+  silence. whisper.cpp and the OpenAI Whisper API are also supported.
+- 🧰 **System-tray GUI** with a settings window (engine, microphone, wake
+  phrases, responsiveness) — plus a full CLI.
+- 📦 **Single-file AppImage** — a double-click install for non-technical users,
+  with a first-run model-download screen.
+- 🔒 **Private by default** — local inference; the only optional cloud paths
+  (OpenAI Whisper / LLM cleanup) are off unless you enable them.
 
-### Common Requirements
-- Python 3.7+
-- PortAudio
-- whisper.cpp
-- (Optional) Ollama for local LLM support
+## Quick start
 
-### Platform-Specific Requirements
-- **Linux**: Wayland and wtype
-- **macOS**: Accessibility permissions
+### Option A — AppImage (recommended for most users)
 
-## Installation
-
-### Linux Setup
-
-1. Install system dependencies:
+A self-contained, double-click app. Build it once (see
+[packaging/README.md](packaging/README.md)):
 
 ```bash
-# Debian/Ubuntu
-sudo apt-get install portaudio19-dev python3-dev wtype
-
-# Arch Linux
-sudo pacman -S portaudio python wtype
+pip install -e .[gui,parakeet] pyinstaller
+bash packaging/build_appimage.sh
+# -> packaging/XVoice2-x86_64.AppImage
 ```
 
-2. Install whisper.cpp:
+Then just run it — it lives in your system tray. On first launch it downloads
+the speech model (~2.4 GB, one time) with a progress dialog.
+
+> Linux note: the Qt tray needs `libxcb-cursor0`
+> (`sudo apt install libxcb-cursor0`), and text injection needs `wtype`
+> (Wayland) or `xdotool` (X11).
+
+### Option B — from source
 
 ```bash
-git clone https://github.com/ggerganov/whisper.cpp.git
-cd whisper.cpp
-
-# Standard CPU-only build
-make
-
-# OR build with CUDA support for NVIDIA GPUs (recommended for faster processing)
-cmake -B build -DGGML_CUDA=1
-cmake --build build -j --config Release
-
-# Download a model (e.g., base)
-bash ./models/download-ggml-model.sh base
-# Add whisper.cpp to your PATH or adjust the path in config.py
-```
-
-### macOS Setup
-
-1. Install dependencies:
-
-```bash
-# Install Homebrew if not already installed
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-   
-# Install required packages
-brew install portaudio
-brew install python
-```
-
-2. Install whisper.cpp:
-
-```bash
-git clone https://github.com/ggerganov/whisper.cpp.git
-cd whisper.cpp
-
-# Standard CPU-only build
-make
-
-# OR build with CUDA support if you have an NVIDIA GPU (recommended for faster processing)
-cmake -B build -DGGML_CUDA=1
-cmake --build build -j --config Release
-
-# Download a model (e.g., base)
-bash ./models/download-ggml-model.sh base
-# Copy to a location in your PATH or update config.py
-sudo cp build/bin/whisper-cli /opt/homebrew/bin/
-```
-
-3. **Critical: Grant Accessibility Permissions**
-   - Go to System Preferences → Security & Privacy → Privacy → Accessibility
-   - Add Terminal (or your application) to the list
-   - This permission is required for text injection to work
-
-4. (Optional) Install Ollama for local LLM support:
-
-```bash
-# Linux
-curl -fsSL https://ollama.com/install.sh | sh
-
-# macOS
-brew install ollama
-
-# Start the Ollama server
-ollama serve
-
-# In a new terminal, pull a model
-ollama pull llama3
-```
-
-5. Install XVoice2:
-
-```bash
-# Clone the repository
 git clone https://github.com/tdoris/xvoice2.git
 cd xvoice2
 
-# Install in development mode
-pip install -e .
+# System deps (Debian/Ubuntu): PortAudio + a text-injection tool
+sudo apt-get install portaudio19-dev python3-dev wtype xdotool libxcb-cursor0
 
-# Or install just the dependencies if you don't want to install the package
-pip install -r requirements.txt
+# Install XVoice2 with the Parakeet engine and the tray GUI
+pip install -e .[gui,parakeet]
+
+# Run the tray app...
+xvoice2-gui
+# ...or the CLI
+xvoice2 --engine parakeet
+```
+
+On macOS, install PortAudio with `brew install portaudio`, and grant
+**Accessibility** permission (System Settings → Privacy & Security →
+Accessibility) so text injection works.
+
+## Transcription engines
+
+Select with `--engine` (CLI), the Settings window (GUI), or `TRANSCRIPTION_ENGINE`
+in config.
+
+- **`parakeet`** *(recommended)* — NVIDIA Parakeet via
+  [onnx-asr](https://github.com/istupakov/onnx-asr), fully local on ONNX Runtime.
+  Being a transducer, it doesn't hallucinate stock phrases on silence/noise, and
+  it emits punctuated, capitalized text. The model downloads on first use and is
+  cached; inference is well under real-time on CPU. The AppImage ships this
+  engine. Multilingual variant: `--parakeet-model nemo-parakeet-tdt-0.6b-v3`.
+- **`whisper`** — local `whisper.cpp` (build separately and set `WHISPER_ROOT`),
+  or the OpenAI Whisper API with `--use-whisper-api`.
+
+```bash
+pip install -e .[parakeet]     # onnx-asr + onnxruntime + huggingface_hub
+xvoice2 --engine parakeet
+```
+
+## Wake-word activation
+
+The mic is always on, but text is only typed while dictation is **armed**.
+Because nothing depends on a global hotkey, this is what makes XVoice2 work over
+**remote desktop**: your local mic is transcribed locally, and the text is
+injected into the focused window — including an RDP/VNC client.
+
+Two interaction models (`WAKE_MODE`, or `--wake-mode`):
+
+- **`session`** *(default)* — say the wake phrase to start typing, the sleep
+  phrase to pause. Everything between is typed. Best for continuous dictation.
+- **`prefix`** — say a short prefix word before each phrase you want typed. No
+  persistent state.
+
+```bash
+xvoice2                       # say "start dictation" ... "stop dictation"
+xvoice2 --start-armed         # begin already listening
+xvoice2 --wake-mode prefix    # say "computer <your text>" each time
+xvoice2 --no-wake-word        # type everything heard (no gating)
+```
+
+Wake/sleep phrases are **editable in the GUI Settings window** (or via
+`WAKE_PHRASE` / `SLEEP_PHRASE` / `WAKE_PREFIX` in config).
+
+## Desktop app (system-tray GUI)
+
+```bash
+pip install -e .[gui]
+xvoice2-gui
+```
+
+A tray icon shows the state (grey = sleeping, green = listening, blue =
+transcribing) with a menu to **Start/Pause dictation**, open **Settings…**, or
+**Quit**. The Settings window configures:
+
+- Transcription **engine** and model
+- **Microphone** device (pick a USB mic so a Bluetooth headset can stay on hi-fi
+  audio) — see below
+- **Wake / sleep phrases** and mode
+- **End-of-speech pause** (responsiveness) and other toggles
+
+Settings are saved to `~/.config/xvoice2/settings.json`, shared with the CLI.
+
+### Microphone selection
+
+Settings → **Microphone** lists your input devices. A plugged-in USB mic appears
+directly — select it and it's used for dictation. This lets a Bluetooth headset
+(e.g. Bose QC35) stay on high-quality A2DP output instead of switching to the
+low-quality headset profile just to expose its mic.
+
+## CLI reference
+
+```bash
+xvoice2 --engine parakeet        # choose engine (whisper | parakeet)
+xvoice2 --mode email             # dictation mode (general | email | command)
+xvoice2 --wake-mode prefix       # wake interaction model
+xvoice2 --start-armed            # skip the initial wake phrase
+xvoice2 --no-wake-word           # disable wake gating
+xvoice2 --use-llm                # OpenAI LLM grammar/punctuation cleanup
+xvoice2 --use-local-llm          # local Ollama cleanup instead
+xvoice2 --list-models            # list installed whisper models
+python -m xvoice2 --help         # full help
 ```
 
 ## Configuration
 
-The package comes with sensible defaults, but you can customize settings by creating a `config_local.py` file:
+Defaults live in `xvoice2/config.py`. For machine-specific overrides (kept out
+of git), create `xvoice2/config_local.py`:
 
 ```bash
-# Copy the example configuration file
 cp xvoice2/config_local.py.example xvoice2/config_local.py
-
-# Edit with your preferred editor
-nano xvoice2/config_local.py
 ```
 
-Key settings to customize:
-- Whisper model and executable path
-- Audio capture parameters
-- Text injection settings
-- LLM configuration (OpenAI API or local Ollama)
-- Dictation modes
+The GUI writes user settings to `~/.config/xvoice2/settings.json` instead — you
+rarely need to touch config files by hand. Notable settings: `TRANSCRIPTION_ENGINE`,
+`PARAKEET_MODEL`, wake phrases, `SILENCE_DURATION` (end-of-speech pause),
+`INPUT_DEVICE_NAME` (microphone), and the optional LLM cleanup.
 
-The application will automatically detect your operating system and use the appropriate settings.
+## How it works
 
-## Usage
+```
+mic (PortAudio) → voice-activity detection → wake-word gate → transcription
+   (Parakeet / whisper.cpp / API) → optional LLM cleanup → inject into focused
+   window (wtype / xdotool / AppleScript)
+```
 
-Once installed, you can run XVoice2 as a command-line application:
+The voice-activity detector rejects non-speech (keyboard clicks, silence) using
+amplitude, duration, and a zero-crossing "voicing" check, so stray sounds aren't
+transcribed. Whole-utterance Whisper hallucinations are filtered as a backstop.
+
+## Development
 
 ```bash
-# Basic usage
-xvoice2
-
-# With specific mode
-xvoice2 --mode email
-
-# With specific Whisper model
-xvoice2 --model medium
-
-# Enable OpenAI LLM formatting (requires API key in config_local.py)
-xvoice2 --use-llm
-
-# Use local Ollama for text formatting
-xvoice2 --use-local-llm
-
-# Specify which Ollama model to use
-xvoice2 --use-local-llm --ollama-model llama3
-
-# List available Whisper models
-xvoice2 --list-models
-
-# List available Ollama models
-xvoice2 --list-ollama-models
+pip install -e .[test]
+pytest                       # full suite
+QT_QPA_PLATFORM=offscreen pytest   # if running GUI tests headless
 ```
 
-You can also run it as a Python module if you prefer:
+Building the distributable AppImage is documented in
+[packaging/README.md](packaging/README.md).
 
-```bash
-python -m xvoice2 --help
-```
-
-## Transcription engines
-
-XVoice2 supports two local transcription engines, selected with
-`TRANSCRIPTION_ENGINE` in `config.py` or the `--engine` flag:
-
-- **`whisper`** (default) — whisper.cpp, or the OpenAI Whisper API with
-  `--use-whisper-api`.
-- **`parakeet`** — NVIDIA Parakeet via [onnx-asr](https://github.com/istupakov/onnx-asr),
-  fully local (ONNX Runtime). Being a transducer, it does not hallucinate stock
-  phrases ("thank you") on silence the way Whisper does, and it outputs
-  punctuated, capitalized text directly. The model (~600M params) downloads on
-  first use and is cached; inference is well under real-time even on CPU.
-
-```bash
-# Install the optional Parakeet dependencies
-pip install -e .[parakeet]        # or: pip install onnx-asr onnxruntime huggingface_hub
-
-# Use Parakeet
-xvoice2 --engine parakeet
-
-# Multilingual Parakeet model (~25 languages)
-xvoice2 --engine parakeet --parakeet-model nemo-parakeet-tdt-0.6b-v3
-```
-
-To make Parakeet the default, set `TRANSCRIPTION_ENGINE = "parakeet"` in
-`config_local.py`.
-
-## Desktop app (system tray GUI)
-
-XVoice2 ships an optional system-tray GUI (PySide6) so you can use it without
-the terminal:
-
-```bash
-pip install -e .[gui]   # installs PySide6
-xvoice2-gui
-```
-
-It lives in the system tray with a coloured status dot (grey = sleeping,
-green = listening, blue = transcribing) and a menu to **Start/Pause dictation**,
-open **Settings…**, or **Quit**. The Settings window edits the transcription
-engine/model, dictation mode, notifications, and the **wake/sleep phrases** —
-saved to `~/.config/xvoice2/settings.json` (shared with the CLI). Wake-phrase and
-mode changes apply to the running app immediately.
-
-On Linux the Qt tray needs `libxcb-cursor0` (`sudo apt install libxcb-cursor0`).
-
-## Wake word activation
-
-XVoice2 keeps the microphone **always on** — there is no push-to-talk key. To
-avoid typing everything it hears, dictation is gated behind a spoken wake word
-(enabled by default). Because nothing depends on a global hotkey, this also
-works cleanly inside **remote desktop sessions**: your local mic is captured and
-transcribed on your machine, and the text is injected into whatever window has
-focus — including an RDP/VNC client, so it lands in the remote session.
-
-Two interaction models (`WAKE_MODE` in `config.py`, or `--wake-mode`):
-
-- **`session`** (default) — say the wake phrase to start typing, the sleep
-  phrase to pause. Everything in between is typed. Best for continuous
-  dictation or coding.
-- **`prefix`** — say a short prefix word immediately before each phrase you want
-  typed. No persistent state.
-
-```bash
-# Session mode (default): say "start dictation" ... then "stop dictation"
-xvoice2
-
-# Begin already armed (skip saying the wake phrase first)
-xvoice2 --start-armed
-
-# Prefix mode: say "computer <your text>" for each phrase
-xvoice2 --wake-mode prefix
-
-# Disable gating entirely and type everything heard (original behavior)
-xvoice2 --no-wake-word
-```
-
-State changes are shown in the terminal and as desktop notifications. The
-phrases (`WAKE_PHRASE`, `SLEEP_PHRASE`, `WAKE_PREFIX`) and toggles
-(`WAKE_WORD_ENABLED`, `START_ARMED`, `WAKE_NOTIFICATIONS`) are configurable in
-`config.py` / `config_local.py`.
-
-## Project Structure
-
-The project is now structured as a proper Python package:
+## Project structure
 
 ```
 xvoice2/
-├── xvoice2/                 # Main package code
-│   ├── __init__.py          # Package initialization
-│   ├── __main__.py          # Entry point for python -m xvoice2
-│   ├── main.py              # Main application 
-│   ├── mic_stream.py        # Microphone input handling
-│   ├── transcriber.py       # Whisper.cpp integration
-│   ├── text_injector.py     # Text injection (wtype or AppleScript)
-│   ├── formatter.py         # Optional LLM integration
-│   ├── config.py            # Configuration settings
-│   ├── config_local.py      # Local config overrides (user-specific)
-│   └── tests/               # Test modules
-├── setup.py                 # Package setup script
-├── pyproject.toml           # PEP 517/518 build system specification
-├── MANIFEST.in              # Package data specification
-└── README.md                # This file
+├── xvoice2/
+│   ├── main.py              # app orchestration + CLI
+│   ├── gui.py               # PySide6 tray app, settings, download dialog
+│   ├── mic_stream.py        # microphone capture + VAD + device enumeration
+│   ├── transcriber.py       # engine dispatch (whisper.cpp / API / Parakeet)
+│   ├── parakeet_backend.py  # Parakeet via onnx-asr
+│   ├── model_download.py    # first-run model download helpers
+│   ├── wake_word.py         # wake/sleep-phrase gating
+│   ├── text_injector.py     # wtype / xdotool / AppleScript injection
+│   ├── formatter.py         # optional LLM cleanup (OpenAI / Ollama)
+│   ├── settings_store.py    # ~/.config/xvoice2/settings.json
+│   ├── notifier.py          # desktop notifications
+│   ├── config.py            # defaults (+ config_local.py overrides)
+│   └── tests/               # unit + integration tests
+├── packaging/               # PyInstaller spec + AppImage build
+├── setup.py / pyproject.toml
+└── README.md
 ```
 
 ## Troubleshooting
 
-If you encounter issues, please check the `troubleshooting.md` file for platform-specific solutions.
-
-## Development
-
-To run tests:
-
-```bash
-# Install test dependencies
-pip install -e .[test]
-
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=xvoice2 tests/
-```
+See [troubleshooting.md](troubleshooting.md) for platform-specific issues. On
+Linux, remember the runtime bits: `libxcb-cursor0` (Qt tray) and `wtype` /
+`xdotool` (text injection).
 
 ## License
 
