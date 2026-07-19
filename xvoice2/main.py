@@ -50,6 +50,12 @@ class VoiceDictationApp:
         self.wake_enabled = getattr(config, "WAKE_WORD_ENABLED", True)
         self.wake = WakeWordController() if self.wake_enabled else None
         self.notify_state = getattr(config, "WAKE_NOTIFICATIONS", True)
+
+        # Optional observer callbacks for a GUI/tray front-end. Defaults are
+        # no-ops so the CLI path is unchanged and the core stays Qt-free.
+        self.on_state_change = lambda armed: None   # armed: bool
+        self.on_status = lambda status: None        # status: "listening"|"transcribing"
+        self.on_transcription = lambda text: None   # text: str that was injected
         
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -174,7 +180,9 @@ class VoiceDictationApp:
                     
                     # Process the audio file
                     self._process_audio(audio_file)
-                    
+                    # Back to idle listening (covers all _process_audio exit paths)
+                    self.on_status("listening")
+
                     # Calculate and log the total processing time
                     process_end_time = datetime.datetime.now()
                     total_processing_time = (process_end_time - process_start_time).total_seconds()
@@ -211,6 +219,7 @@ class VoiceDictationApp:
         """
         # Step 1: Transcribe the audio
         debug_log("Transcribing...", end="")
+        self.on_status("transcribing")
         transcription = self.transcriber.transcribe(audio_file)
         
         if not transcription:
@@ -276,6 +285,8 @@ class VoiceDictationApp:
         success = self.text_injector.inject_text(formatted_text)
         print(" Done" if success else " Failed")
         debug_log(f"Final text injected: '{formatted_text}'")
+        if success:
+            self.on_transcription(formatted_text)
 
     def _print_wake_banner(self) -> None:
         """Print (and notify) the wake-word gate's current state at startup."""
@@ -304,11 +315,36 @@ class VoiceDictationApp:
         debug_log(f"Wake state -> {state}")
         print(f"[{state}] " + ("Dictation on — start speaking." if armed
                                else "Dictation paused."))
+        self.on_state_change(armed)
         if self.notify_state:
             if armed:
                 notifier.notify("XVoice2", "🎤 Listening — dictation on")
             else:
                 notifier.notify("XVoice2", "😴 Dictation paused")
+
+    def set_armed(self, armed: bool) -> None:
+        """Programmatically arm/disarm dictation (used by the GUI tray).
+
+        No-op when wake gating is disabled. Fires the same state announcement
+        (and observer callback) as a spoken wake/sleep phrase.
+        """
+        if self.wake is None:
+            return
+        if self.wake.armed != armed:
+            self.wake.armed = armed
+            self._announce_state(armed)
+
+    def reload_wake_controller(self) -> None:
+        """Rebuild the wake controller from current config after a settings change.
+
+        Lets the GUI apply new wake/sleep phrases, mode, and notification prefs
+        to the running dictation loop without restarting the process.
+        """
+        self.wake_enabled = getattr(config, "WAKE_WORD_ENABLED", True)
+        self.wake = WakeWordController() if self.wake_enabled else None
+        self.notify_state = getattr(config, "WAKE_NOTIFICATIONS", True)
+        if self.wake is not None:
+            self.on_state_change(self.wake.armed)
 
     def _confirm_command(self, command: str) -> bool:
         """

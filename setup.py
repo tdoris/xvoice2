@@ -31,6 +31,9 @@ setup(
         "console_scripts": [
             "xvoice2=xvoice2.main:main",
         ],
+        "gui_scripts": [
+            "xvoice2-gui=xvoice2.gui:main",
+        ],
     },
     # Define test dependencies separately
     extras_require={
@@ -40,6 +43,10 @@ setup(
             "onnx-asr",
             "onnxruntime",
             "huggingface_hub",
+        ],
+        # Optional system-tray GUI. Enable with: pip install -e .[gui]
+        "gui": [
+            "PySide6",
         ],
         "test": [
             "pytest",

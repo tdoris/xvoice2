@@ -206,6 +206,25 @@ xvoice2 --engine parakeet --parakeet-model nemo-parakeet-tdt-0.6b-v3
 To make Parakeet the default, set `TRANSCRIPTION_ENGINE = "parakeet"` in
 `config_local.py`.
 
+## Desktop app (system tray GUI)
+
+XVoice2 ships an optional system-tray GUI (PySide6) so you can use it without
+the terminal:
+
+```bash
+pip install -e .[gui]   # installs PySide6
+xvoice2-gui
+```
+
+It lives in the system tray with a coloured status dot (grey = sleeping,
+green = listening, blue = transcribing) and a menu to **Start/Pause dictation**,
+open **Settings…**, or **Quit**. The Settings window edits the transcription
+engine/model, dictation mode, notifications, and the **wake/sleep phrases** —
+saved to `~/.config/xvoice2/settings.json` (shared with the CLI). Wake-phrase and
+mode changes apply to the running app immediately.
+
+On Linux the Qt tray needs `libxcb-cursor0` (`sudo apt install libxcb-cursor0`).
+
 ## Wake word activation
 
 XVoice2 keeps the microphone **always on** — there is no push-to-talk key. To
