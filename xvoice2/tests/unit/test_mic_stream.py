@@ -224,8 +224,13 @@ class TestMicrophoneStream:
             assert stream.effective_threshold() == 1234
 
     def test_recalibrate_if_needed_uncalibrated_no_crash(self):
-        """Regression: false-trigger recalibration must not multiply None."""
-        with patch('pyaudio.PyAudio'):
+        """Regression: false-trigger recalibration must not multiply None.
+
+        np.random.random is pinned so the unrelated ~10% periodic-recalibration
+        branch (which would overwrite adaptive_threshold) can't make this flaky.
+        """
+        with patch('pyaudio.PyAudio'), \
+             patch('numpy.random.random', return_value=0.99):
             stream = MicrophoneStream()
             assert stream.adaptive_threshold is None
 
