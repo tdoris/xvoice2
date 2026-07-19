@@ -69,25 +69,35 @@ class VoiceDictationApp:
         Returns:
             True if all dependencies are available, False otherwise
         """
-        # Check for whisper.cpp
-        if not self.transcriber.is_available():
-            print(f"Error: whisper.cpp executable '{config.WHISPER_EXECUTABLE}' not found or not working")
-            if self.is_macos:
-                print("Make sure whisper.cpp is installed via Homebrew or in your PATH")
-                print("  brew install whisper.cpp")
-                print("  or download and build from: https://github.com/ggerganov/whisper.cpp")
-            else:
-                print("Please make sure whisper.cpp is installed and in your PATH")
-            return False
-        
-        # Check if the selected local model is available. This only applies to
-        # local whisper.cpp transcription; when using the OpenAI Whisper API no
-        # local model file is required.
-        using_api = getattr(config, 'USE_WHISPER_API', False) and self.transcriber.api_key
-        if not using_api and not self.transcriber.is_model_available():
-            print(f"Error: Selected Whisper model '{self.transcriber.model}' not found")
-            print(self.transcriber.get_model_installation_instructions())
-            return False
+        engine = getattr(config, 'TRANSCRIPTION_ENGINE', 'whisper').lower()
+        if engine == 'parakeet':
+            # Parakeet engine: only needs the onnx-asr runtime; the model is
+            # downloaded on first use.
+            if not self.transcriber.is_available():
+                print("Error: Parakeet engine selected but the onnx-asr runtime is not installed.")
+                print("Install it with: pip install onnx-asr onnxruntime huggingface_hub")
+                print("  (or: pip install -e .[parakeet])")
+                return False
+        else:
+            # Check for whisper.cpp
+            if not self.transcriber.is_available():
+                print(f"Error: whisper.cpp executable '{config.WHISPER_EXECUTABLE}' not found or not working")
+                if self.is_macos:
+                    print("Make sure whisper.cpp is installed via Homebrew or in your PATH")
+                    print("  brew install whisper.cpp")
+                    print("  or download and build from: https://github.com/ggerganov/whisper.cpp")
+                else:
+                    print("Please make sure whisper.cpp is installed and in your PATH")
+                return False
+
+            # Check if the selected local model is available. This only applies to
+            # local whisper.cpp transcription; when using the OpenAI Whisper API no
+            # local model file is required.
+            using_api = getattr(config, 'USE_WHISPER_API', False) and self.transcriber.api_key
+            if not using_api and not self.transcriber.is_model_available():
+                print(f"Error: Selected Whisper model '{self.transcriber.model}' not found")
+                print(self.transcriber.get_model_installation_instructions())
+                return False
             
         # Check for text injector (wtype on Linux, AppleScript on macOS)
         if not self.text_injector.is_available():
@@ -134,6 +144,11 @@ class VoiceDictationApp:
         if not self.check_dependencies():
             return
             
+        engine = getattr(config, 'TRANSCRIPTION_ENGINE', 'whisper').lower()
+        if engine == 'parakeet':
+            print(f"Transcription engine: Parakeet ({getattr(config, 'PARAKEET_MODEL', '')})")
+        else:
+            print(f"Transcription engine: Whisper ({self.transcriber.model})")
         debug_log(f"Starting voice dictation in '{self.mode}' mode...")
         debug_log("Speak into your microphone. Press Ctrl+C to exit.")
 
@@ -356,6 +371,17 @@ def main():
     )
     
     parser.add_argument(
+        "--engine",
+        choices=["whisper", "parakeet"],
+        help=f"Transcription engine (default: {getattr(config, 'TRANSCRIPTION_ENGINE', 'whisper')})"
+    )
+
+    parser.add_argument(
+        "--parakeet-model",
+        help=f"onnx-asr Parakeet model id (default: {getattr(config, 'PARAKEET_MODEL', '')})"
+    )
+
+    parser.add_argument(
         "--use-whisper-api",
         action="store_true",
         help="Use OpenAI Whisper API for transcription instead of local whisper.cpp"
@@ -461,6 +487,12 @@ def main():
         else:
             print("Warning: OpenAI API key not found. Set OPENAI_API_KEY environment variable or update config_local.py")
         
+    # Transcription engine selection
+    if args.engine:
+        config.TRANSCRIPTION_ENGINE = args.engine
+    if args.parakeet_model:
+        config.PARAKEET_MODEL = args.parakeet_model
+
     # Wake-word configuration
     if args.no_wake_word:
         config.WAKE_WORD_ENABLED = False

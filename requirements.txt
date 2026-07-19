@@ -2,6 +2,12 @@ pyaudio==0.2.13
 numpy==1.24.3
 requests==2.31.0
 
+# Optional: Parakeet (NVIDIA) transcription engine. Only needed when
+# TRANSCRIPTION_ENGINE = "parakeet". Install via: pip install -e .[parakeet]
+# onnx-asr
+# onnxruntime
+# huggingface_hub
+
 # Test dependencies
 pytest==7.4.3
 pytest-mock==3.12.0

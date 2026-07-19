@@ -5,7 +5,7 @@ A cross-platform voice dictation application that captures microphone input, tra
 ## Features
 
 - Real-time microphone input capture using PortAudio
-- Speech-to-text transcription using whisper.cpp
+- Speech-to-text transcription using whisper.cpp, or optionally **NVIDIA Parakeet** (local, via onnx-asr) for higher accuracy, inline punctuation, and far fewer silence hallucinations
 - Text injection into the active application (using wtype on Linux, AppleScript on macOS)
 - Always-on microphone with **wake-word activation** — no hotkey to press, so it works over remote desktop (RDP/VNC) sessions where a hotkey would be captured by the client
 - Optional grammar and punctuation correction using LLM (supports both OpenAI API and local Ollama models)
@@ -178,6 +178,33 @@ You can also run it as a Python module if you prefer:
 ```bash
 python -m xvoice2 --help
 ```
+
+## Transcription engines
+
+XVoice2 supports two local transcription engines, selected with
+`TRANSCRIPTION_ENGINE` in `config.py` or the `--engine` flag:
+
+- **`whisper`** (default) — whisper.cpp, or the OpenAI Whisper API with
+  `--use-whisper-api`.
+- **`parakeet`** — NVIDIA Parakeet via [onnx-asr](https://github.com/istupakov/onnx-asr),
+  fully local (ONNX Runtime). Being a transducer, it does not hallucinate stock
+  phrases ("thank you") on silence the way Whisper does, and it outputs
+  punctuated, capitalized text directly. The model (~600M params) downloads on
+  first use and is cached; inference is well under real-time even on CPU.
+
+```bash
+# Install the optional Parakeet dependencies
+pip install -e .[parakeet]        # or: pip install onnx-asr onnxruntime huggingface_hub
+
+# Use Parakeet
+xvoice2 --engine parakeet
+
+# Multilingual Parakeet model (~25 languages)
+xvoice2 --engine parakeet --parakeet-model nemo-parakeet-tdt-0.6b-v3
+```
+
+To make Parakeet the default, set `TRANSCRIPTION_ENGINE = "parakeet"` in
+`config_local.py`.
 
 ## Wake word activation
 

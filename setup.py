@@ -34,6 +34,13 @@ setup(
     },
     # Define test dependencies separately
     extras_require={
+        # Optional Parakeet (NVIDIA) transcription engine via onnx-asr.
+        # Enable with: pip install -e .[parakeet]
+        "parakeet": [
+            "onnx-asr",
+            "onnxruntime",
+            "huggingface_hub",
+        ],
         "test": [
             "pytest",
             "pytest-mock",

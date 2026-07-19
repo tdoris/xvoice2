@@ -13,6 +13,18 @@ import sys
 # Detect operating system
 IS_MACOS = platform.system() == "Darwin"
 
+# --- Transcription engine ---
+# "whisper"  = whisper.cpp / OpenAI Whisper API (the default).
+# "parakeet" = NVIDIA Parakeet via onnx-asr (fully local, ONNX Runtime).
+# Parakeet produces punctuated, capitalized text and, being a transducer, does
+# not hallucinate stock phrases ("thank you") on silence/noise the way Whisper
+# does. Requires: pip install onnx-asr onnxruntime huggingface_hub
+#   (or: pip install -e .[parakeet])
+TRANSCRIPTION_ENGINE = "whisper"
+# onnx-asr model id used when TRANSCRIPTION_ENGINE == "parakeet".
+# "nemo-parakeet-tdt-0.6b-v2" is English; "-v3" is multilingual (~25 languages).
+PARAKEET_MODEL = "nemo-parakeet-tdt-0.6b-v2"
+
 # Whisper model settings
 WHISPER_MODEL = "base"  # Options: "tiny", "base", "small", "medium", "large"
 

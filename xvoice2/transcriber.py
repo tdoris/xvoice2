@@ -392,6 +392,10 @@ class Transcriber:
         self.whisper_executable = config.WHISPER_EXECUTABLE
         self.is_macos = platform.system() == "Darwin"
         self._model_path = None  # Will be set when validated
+
+        # Transcription engine: "whisper" (default) or "parakeet".
+        self.engine = getattr(config, 'TRANSCRIPTION_ENGINE', 'whisper').lower()
+        self._parakeet = None  # Lazily created ParakeetTranscriber
         
         # Persistent process handling
         self.use_persistent = getattr(config, 'USE_PERSISTENT_WHISPER', True)
@@ -492,14 +496,38 @@ class Transcriber:
         if not os.path.exists(audio_file):
             debug_log(f"Audio file not found: {audio_file}")
             return None
-        
-        # Decide which transcription method to use
+
+        # Parakeet engine (local, ONNX Runtime).
+        if self.engine == 'parakeet':
+            debug_log("Using Parakeet for transcription")
+            return self._transcribe_with_parakeet(audio_file)
+
+        # Whisper engine: API or local whisper.cpp.
         if self.use_api and self.api_key:
             debug_log("Using OpenAI Whisper API for transcription")
             return self._transcribe_with_api(audio_file)
         else:
             debug_log("Using local whisper.cpp for transcription")
             return self._transcribe_with_local(audio_file)
+
+    def _get_parakeet_backend(self):
+        """Lazily create and cache the Parakeet backend (keeps the model resident)."""
+        if self._parakeet is None:
+            from xvoice2.parakeet_backend import ParakeetTranscriber
+            self._parakeet = ParakeetTranscriber()
+        return self._parakeet
+
+    def _transcribe_with_parakeet(self, audio_file: str) -> Optional[str]:
+        """Transcribe using the local Parakeet backend.
+
+        Parakeet output is run through clean_transcription for consistency with
+        the Whisper paths (whitespace/artifact cleanup and the whole-utterance
+        hallucination filter), though Parakeet rarely triggers the latter.
+        """
+        raw = self._get_parakeet_backend().transcribe(audio_file)
+        if not raw:
+            return None
+        return clean_transcription(raw)
     
     def _transcribe_with_local(self, audio_file: str) -> Optional[str]:
         """
@@ -635,10 +663,14 @@ class Transcriber:
     def is_model_available(self) -> bool:
         """
         Check if the selected model file exists.
-        
+
         Returns:
             True if the model file is found, False otherwise
         """
+        # Parakeet models are fetched on demand by onnx-asr (from the Hugging
+        # Face cache), so there is no local model file to check up front.
+        if self.engine == 'parakeet':
+            return True
         return self._find_model_path() is not None
 
     def get_model_installation_instructions(self) -> str:
@@ -698,6 +730,10 @@ class Transcriber:
         Returns:
             True if at least one transcription method is available
         """
+        # Parakeet engine: available if the onnx-asr runtime is importable.
+        if self.engine == 'parakeet':
+            return self._get_parakeet_backend().is_available()
+
         # Check if API is available first
         if self.use_api and self.api_key and self.is_api_available():
             return True
