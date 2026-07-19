@@ -1,6 +1,8 @@
-pyaudio==0.2.13
-numpy==1.24.3
-requests==2.31.0
+# Runtime dependencies. Lower bounds chosen so wheels exist on modern Pythons
+# (incl. 3.12); avoid exact pins that force source builds.
+pyaudio>=0.2.14
+numpy>=1.26
+requests>=2.31
 
 # Optional: Parakeet (NVIDIA) transcription engine. Only needed when
 # TRANSCRIPTION_ENGINE = "parakeet". Install via: pip install -e .[parakeet]
@@ -8,8 +10,5 @@ requests==2.31.0
 # onnxruntime
 # huggingface_hub
 
-# Test dependencies
-pytest==7.4.3
-pytest-mock==3.12.0
-pytest-cov==4.1.0
-psutil==5.9.5
+# Test dependencies live in the [test] extra (see setup.py):
+#   pip install -e .[test]

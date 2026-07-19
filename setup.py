@@ -52,6 +52,7 @@ setup(
             "pytest",
             "pytest-mock",
             "pytest-cov",
+            "psutil",
         ],
         "dev": [
             "black",
