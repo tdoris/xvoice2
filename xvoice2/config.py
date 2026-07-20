@@ -72,6 +72,12 @@ SILENCE_THRESHOLD = 1000  # Silence threshold on the int16 amplitude scale (fall
 SILENCE_DURATION = 0.7  # Duration of silence (s) to end an utterance. Lower = snappier wake/dictation, but ends on shorter pauses.
 THRESHOLD_ADJUSTMENT_FACTOR = 1.0  # Multiplier for auto-calibrated threshold (>1 = less sensitive, <1 = more sensitive)
 CALIBRATION_ENABLED = True  # Whether to use auto-calibration for silence detection
+# Recalibration rate-limiting. A full recalibration briefly pauses dictation
+# ("please remain quiet"), so it must not happen too often. Require this many
+# consecutive rejected (non-speech) clips before a full recalibration, and never
+# recalibrate more than once per cooldown period regardless of triggers.
+FALSE_TRIGGER_RECALIBRATION = 5  # consecutive false triggers before a full recalibration
+RECALIBRATION_COOLDOWN = 30  # minimum seconds between full recalibrations
 # --- Non-speech clip rejection (VAD gating) ---
 # These decide whether a captured clip is real speech BEFORE it is sent to
 # Whisper. Whisper hallucinates stock phrases ("thank you") on near-silent

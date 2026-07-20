@@ -5,6 +5,7 @@ Unit tests for the mic_stream module.
 import pytest
 import os
 import tempfile
+import time
 import numpy as np
 from unittest.mock import patch, MagicMock
 
@@ -263,6 +264,44 @@ class TestMicrophoneStream:
             stream.recalibrate_if_needed(false_trigger_count=1)
             assert stream.adaptive_threshold is not None
             assert stream.adaptive_threshold > config.SILENCE_THRESHOLD
+
+    def test_recalibration_respects_cooldown(self):
+        """A full recalibration must not fire again within the cooldown window."""
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            stream.last_calibration_time = time.time()  # just calibrated
+            with patch.object(stream, 'calibrate_silence_threshold') as cal, \
+                 patch('xvoice2.config.RECALIBRATION_COOLDOWN', 30), \
+                 patch('xvoice2.config.FALSE_TRIGGER_RECALIBRATION', 5):
+                # Many false triggers, but within cooldown -> no full recalibration.
+                result = stream.recalibrate_if_needed(false_trigger_count=10)
+            assert result is False
+            cal.assert_not_called()
+
+    def test_full_recalibration_after_threshold_past_cooldown(self):
+        """Enough consecutive false triggers past the cooldown -> recalibrate."""
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            stream.last_calibration_time = time.time() - 100  # cooldown elapsed
+            with patch.object(stream, 'calibrate_silence_threshold') as cal, \
+                 patch('xvoice2.config.RECALIBRATION_COOLDOWN', 30), \
+                 patch('xvoice2.config.FALSE_TRIGGER_RECALIBRATION', 5):
+                result = stream.recalibrate_if_needed(false_trigger_count=5)
+            assert result is True
+            cal.assert_called_once()
+
+    def test_below_trigger_threshold_no_full_recalibration(self):
+        """Few false triggers only bump the threshold, no pausing recalibration."""
+        with patch('pyaudio.PyAudio'):
+            stream = MicrophoneStream()
+            stream.last_calibration_time = time.time() - 100
+            with patch.object(stream, 'calibrate_silence_threshold') as cal, \
+                 patch('numpy.random.random', return_value=0.99), \
+                 patch('xvoice2.config.FALSE_TRIGGER_RECALIBRATION', 5):
+                result = stream.recalibrate_if_needed(false_trigger_count=2)
+            assert result is False
+            cal.assert_not_called()
+            assert stream.adaptive_threshold is not None  # threshold still bumped
 
     @patch('tempfile.mkdtemp')
     def test_close_is_idempotent(self, mock_mkdtemp):

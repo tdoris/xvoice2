@@ -522,14 +522,24 @@ class MicrophoneStream:
             
         return temp_file, True
     
-    def recalibrate_if_needed(self, false_trigger_count: int = 0) -> None:
+    def recalibrate_if_needed(self, false_trigger_count: int = 0) -> bool:
         """
         Recalibrate the silence threshold if needed based on false triggers.
-        
+
+        A full recalibration briefly interrupts dictation, so it is rate-limited:
+        it needs several consecutive false triggers and won't happen more than
+        once per RECALIBRATION_COOLDOWN seconds. The cheap per-trigger threshold
+        bump is not rate-limited.
+
         Args:
-            false_trigger_count: Number of recent false triggers
+            false_trigger_count: Number of recent consecutive false triggers.
+
+        Returns:
+            True if a full recalibration was performed (so the caller can reset
+            its false-trigger counter), False otherwise.
         """
-        # Increase threshold if we're getting too many false positives
+        # Increase threshold if we're getting too many false positives. This is
+        # cheap (no pause) so it is not rate-limited.
         if false_trigger_count > 0:
             # Fall back to the static threshold if calibration never ran, so we
             # never do arithmetic on None.
@@ -538,29 +548,39 @@ class MicrophoneStream:
             # then more gradually for subsequent triggers
             adjustment_factor = min(0.1 * false_trigger_count, 0.5)  # Cap at 50% increase
             self.adaptive_threshold = old_threshold * (1 + adjustment_factor)
-            
+
             # Put a cap on the maximum threshold to prevent it from getting too high
             max_reasonable_threshold = 3000  # Based on typical int16 audio values
             if self.adaptive_threshold > max_reasonable_threshold:
                 self.adaptive_threshold = max_reasonable_threshold
                 debug_log(f"Threshold capped at maximum reasonable value: {max_reasonable_threshold}")
-                
+
             debug_log(f"Adjusted threshold after false trigger: {old_threshold:.1f} → {self.adaptive_threshold:.1f}")
-            
-        # Allow periodic recalibration to recover from a threshold that's been raised too high
-        if false_trigger_count >= 3:
-            # If we've had several false triggers in a row, do a fresh calibration
+
+        # Cooldown: never perform a full (pausing) recalibration more often than
+        # this, no matter how many triggers fire.
+        cooldown = getattr(config, 'RECALIBRATION_COOLDOWN', 30)
+        since_last = time.time() - getattr(self, 'last_calibration_time', 0.0)
+        if since_last < cooldown:
+            return False
+
+        # Full recalibration after enough consecutive false triggers.
+        trigger_threshold = getattr(config, 'FALSE_TRIGGER_RECALIBRATION', 5)
+        if false_trigger_count >= trigger_threshold:
             debug_log("Multiple false triggers detected - performing fresh calibration")
             self.calibrate_silence_threshold()
             self.last_calibration_time = time.time()
-            return
-            
-        # Periodically recalibrate after long idle periods (randomly, ~10% chance when idle)
-        if not hasattr(self, 'last_calibration_time') or time.time() - self.last_calibration_time > 60:
-            if np.random.random() < 0.1:  # 10% chance to recalibrate when idle
-                debug_log("Performing periodic recalibration during idle time")
-                self.calibrate_silence_threshold()
-                self.last_calibration_time = time.time()
+            return True
+
+        # Otherwise, an occasional periodic recalibration during long idle
+        # periods (past the cooldown, with a small random chance).
+        if since_last > 60 and np.random.random() < 0.1:
+            debug_log("Performing periodic recalibration during idle time")
+            self.calibrate_silence_threshold()
+            self.last_calibration_time = time.time()
+            return True
+
+        return False
     
     def listen_continuous(self) -> Generator[str, None, None]:
         """
@@ -628,7 +648,11 @@ class MicrophoneStream:
                                               f"voiced={voiced_seconds:.2f}s, avg_amp={avg_amplitude:.1f}, "
                                               f"max_amp={max_amplitude:.1f}, threshold={threshold:.1f}]")
                                     false_trigger_count += 1
-                                    self.recalibrate_if_needed(false_trigger_count)
+                                    # Reset the counter when a full recalibration
+                                    # fires, so it doesn't recalibrate on every
+                                    # subsequent noise clip.
+                                    if self.recalibrate_if_needed(false_trigger_count):
+                                        false_trigger_count = 0
                                     os.remove(file_path)  # Clean up the audio file
                                     continue
 
